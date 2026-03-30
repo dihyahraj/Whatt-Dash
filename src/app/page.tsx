@@ -79,24 +79,30 @@ export default function Dashboard() {
     if (!input.trim() || !selectedId || sending) return;
     setSending(true);
 
-    const res = await fetch(`/api/conversations/${selectedId}/send`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ message: input.trim() }),
-    });
+    try {
+      const res = await fetch(`/api/conversations/${selectedId}/send`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: input.trim() }),
+      });
 
-    const data = await res.json();
+      const data = await res.json();
 
-    // Agar API se error aaya toh screen par alert show karega
-    if (!res.ok) {
-      alert("WhatsApp Error: " + (data.error || "Failed") + "\nDetails: " + JSON.stringify(data.details || {}));
+      // Agar API fail hoti hai, toh poora data alert mein show karega
+      if (!res.ok) {
+        console.error("🚨 Full API Error Data:", data);
+        alert("WhatsApp/Server Error Pata Chal Gaya:\n\n" + JSON.stringify(data, null, 2));
+        setSending(false);
+        return;
+      }
+
+      setInput("");
+      fetchMessages(selectedId);
+    } catch (err) {
+      alert("🚨 Network Code Error:\n" + String(err));
+    } finally {
       setSending(false);
-      return;
     }
-
-    setInput("");
-    setSending(false);
-    fetchMessages(selectedId);
   }
 
   function formatTime(dateStr: string) {
