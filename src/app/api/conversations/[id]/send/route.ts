@@ -26,10 +26,6 @@ export async function POST(
   }
 
   // Send via WhatsApp
-  // Yeh aapka purana code hai:
-  // await sendWhatsAppMessage(conversation.phone, message);
-
-  // Isko hata kar yeh naya code dalein:
   const waResponse = await sendWhatsAppMessage(conversation.phone, message);
 
   // Agar WhatsApp ki taraf se error aata hai toh API wahi ruk jaye:
