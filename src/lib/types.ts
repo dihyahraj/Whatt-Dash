@@ -2,7 +2,7 @@ export interface Conversation {
   id: string;
   phone: string;
   name: string | null;
-  mode: "agent" | "human";
+
   updated_at: string;
   created_at: string;
 }

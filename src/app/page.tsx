@@ -75,19 +75,6 @@ export default function Dashboard() {
     };
   }, [selectedId, fetchConversations, supabase]);
 
-  async function toggleMode() {
-    if (!selected) return;
-    const newMode = selected.mode === "agent" ? "human" : "agent";
-    await fetch(`/api/conversations/${selected.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mode: newMode }),
-    });
-    setConversations((prev) =>
-      prev.map((c) => (c.id === selected.id ? { ...c, mode: newMode } : c))
-    );
-  }
-
   async function handleSend() {
     if (!input.trim() || !selectedId || sending) return;
     setSending(true);
@@ -174,15 +161,6 @@ export default function Dashboard() {
                       ) : (
                         <span />
                       )}
-                      <span
-                        className={`text-[9px] px-1.5 py-0.5 rounded font-medium flex-shrink-0 uppercase tracking-wide ${
-                          convo.mode === "agent"
-                            ? "bg-emerald-500/20 text-emerald-400"
-                            : "bg-amber-500/20 text-amber-400"
-                        }`}
-                      >
-                        {convo.mode === "agent" ? "AI" : "You"}
-                      </span>
                     </div>
                   </div>
                 </div>
@@ -221,17 +199,6 @@ export default function Dashboard() {
                   <p className="text-xs text-white/40 leading-tight mt-0.5">{selected.phone}</p>
                 </div>
               </div>
-              <button
-                onClick={toggleMode}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 ${
-                  selected.mode === "agent"
-                    ? "bg-emerald-500/15 text-emerald-400 hover:bg-emerald-500/25 border border-emerald-500/20"
-                    : "bg-amber-500/15 text-amber-400 hover:bg-amber-500/25 border border-amber-500/20"
-                }`}
-              >
-                <span className={`w-1.5 h-1.5 rounded-full ${selected.mode === "agent" ? "bg-emerald-400" : "bg-amber-400"}`} />
-                {selected.mode === "agent" ? "AI Mode" : "Human Mode"}
-              </button>
             </div>
 
             {/* Messages */}
@@ -261,7 +228,6 @@ export default function Dashboard() {
                       </div>
                       {showTime && (
                         <p className="text-[10px] text-white/25 mt-1.5 px-1">
-                          {!isUser && <span className="text-emerald-500/60 mr-1">AI ·</span>}
                           {formatTime(msg.created_at)}
                         </p>
                       )}

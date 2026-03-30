@@ -1,7 +1,5 @@
 import { NextRequest } from "next/server";
 import { supabase } from "@/lib/supabase";
-import { sendWhatsAppMessage } from "@/lib/whatsapp";
-import { getAIResponse } from "@/lib/ai";
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -91,44 +89,7 @@ export async function POST(request: NextRequest) {
       .update({ updated_at: new Date().toISOString() })
       .eq("id", conversation.id);
 
-    // If mode is 'human', don't auto-reply
-    if (conversation.mode === "human") {
-      return Response.json({ status: "stored_for_human" });
-    }
-
-    // Fetch conversation history (last 20 messages for context)
-    const { data: history } = await supabase
-      .from("messages")
-      .select("role, content")
-      .eq("conversation_id", conversation.id)
-      .order("created_at", { ascending: true })
-      .limit(20);
-
-    // Get AI response
-    const aiResponse = await getAIResponse(
-      (history || []).map((m) => ({
-        role: m.role as "user" | "assistant",
-        content: m.content,
-      }))
-    );
-
-    // Send response via WhatsApp
-    await sendWhatsAppMessage(phone, aiResponse);
-
-    // Store AI response
-    await supabase.from("messages").insert({
-      conversation_id: conversation.id,
-      role: "assistant",
-      content: aiResponse,
-    });
-
-    // Update conversation timestamp again
-    await supabase
-      .from("conversations")
-      .update({ updated_at: new Date().toISOString() })
-      .eq("id", conversation.id);
-
-    return Response.json({ status: "replied" });
+    return Response.json({ status: "stored" });
   } catch (error) {
     console.error("Webhook error:", error);
     return Response.json({ status: "error" }, { status: 500 });
