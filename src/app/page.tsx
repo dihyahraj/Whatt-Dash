@@ -78,11 +78,22 @@ export default function Dashboard() {
   async function handleSend() {
     if (!input.trim() || !selectedId || sending) return;
     setSending(true);
-    await fetch(`/api/conversations/${selectedId}/send`, {
+
+    const res = await fetch(`/api/conversations/${selectedId}/send`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message: input.trim() }),
     });
+
+    const data = await res.json();
+
+    // Agar API se error aaya toh screen par alert show karega
+    if (!res.ok) {
+      alert("WhatsApp Error: " + (data.error || "Failed") + "\nDetails: " + JSON.stringify(data.details || {}));
+      setSending(false);
+      return;
+    }
+
     setInput("");
     setSending(false);
     fetchMessages(selectedId);
