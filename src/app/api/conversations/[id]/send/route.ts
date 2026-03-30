@@ -26,7 +26,20 @@ export async function POST(
   }
 
   // Send via WhatsApp
-  await sendWhatsAppMessage(conversation.phone, message);
+  // Yeh aapka purana code hai:
+  // await sendWhatsAppMessage(conversation.phone, message);
+
+  // Isko hata kar yeh naya code dalein:
+  const waResponse = await sendWhatsAppMessage(conversation.phone, message);
+
+  // Agar WhatsApp ki taraf se error aata hai toh API wahi ruk jaye:
+  if (waResponse.error) {
+    console.error("WhatsApp API Error:", waResponse.error);
+    return Response.json(
+      { error: "WhatsApp API failed", details: waResponse.error }, 
+      { status: 400 }
+    );
+  }
 
   // Store in DB
   const { data: msg, error: msgError } = await supabase
