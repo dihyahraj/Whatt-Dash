@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
-import type { ConversationWithLastMessage, Message, MessageType } from "@/lib/types";
+import type { ConversationWithLastMessage, Message, MessageType, Label } from "@/lib/types";
 
 const EMOJIS: Record<string, string[]> = {
   "😀": ["😀","😃","😄","😁","😅","😂","🤣","😊","😇","🙂","😉","😌","😍","🥰","😘","😗","😙","😚","😋","😛","😝","😜","🤪","🤨","🧐","🤓","😎","🥸","🤩","🥳","😏","😒","😞","😔","😟","😕","🙁","😣","😖","😫","😩","🥺","😢","😭","😤","😠","😡","🤬","🤯","😳","🥵","🥶","😱","😨","😰","😥","😓","🤗","🤔","🤭","🤫","🤥","😶","😐","😑","😬","🙄","😯","😦","😧","😮","😲","🥱","😴","🤤","😪","😵","🤐","🥴","🤢","🤮","🤧","😷","🤒","🤕","🤑","🤠","😈","👿","👹","👺","🤡","💩","👻","💀","👽","👾","🤖","🎃"],
@@ -47,6 +47,11 @@ export default function Dashboard() {
   const [showChatSearch, setShowChatSearch] = useState(false);
   const [archived, setArchived] = useState<ConversationWithLastMessage[]>([]);
   const [showArchived, setShowArchived] = useState(false);
+  const [filter, setFilter] = useState<"all" | "unread" | string>("all"); // "all", "unread", or label_id
+  const [labels, setLabels] = useState<Label[]>([]);
+  const [showLabelMenu, setShowLabelMenu] = useState<string | null>(null); // convo id
+  const [newLabelName, setNewLabelName] = useState("");
+  const [newLabelColor, setNewLabelColor] = useState("#10b981");
 
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -59,8 +64,9 @@ export default function Dashboard() {
   const fetchConvos = useCallback(async () => { try { const r = await fetch("/api/conversations"); const d = await r.json(); if (Array.isArray(d)) setConvos(d); } catch {} }, []);
   const fetchMsgs = useCallback(async (id: string) => { try { const r = await fetch(`/api/conversations/${id}/messages`); const d = await r.json(); if (Array.isArray(d)) setMsgs(d); } catch {} }, []);
   const fetchArchived = useCallback(async () => { try { const r = await fetch("/api/conversations/archived"); const d = await r.json(); if (Array.isArray(d)) setArchived(d); } catch {} }, []);
+  const fetchLabels = useCallback(async () => { try { const r = await fetch("/api/labels"); const d = await r.json(); if (Array.isArray(d)) setLabels(d); } catch {} }, []);
 
-  useEffect(() => { fetchConvos(); fetchArchived(); }, [fetchConvos, fetchArchived]);
+  useEffect(() => { fetchConvos(); fetchArchived(); fetchLabels(); }, [fetchConvos, fetchArchived, fetchLabels]);
   useEffect(() => { if (selId) { fetchMsgs(selId); fetch(`/api/conversations/${selId}/read`, { method: "POST" }).catch(() => {}); setConvos((p) => p.map((c) => c.id === selId ? { ...c, unread_count: 0 } : c)); setIsAtBottom(true); } }, [selId, fetchMsgs]);
 
   // Only auto-scroll when user is at bottom
@@ -147,6 +153,21 @@ export default function Dashboard() {
     setMsgs((p) => p.map((x) => x.id === msgId ? { ...x, reaction: newEmoji || null } : x)); setReactPickerId(null);
   }
 
+  // Label actions
+  async function createLabel() {
+    if (!newLabelName.trim()) return;
+    await fetch("/api/labels", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: newLabelName.trim(), color: newLabelColor }) });
+    setNewLabelName(""); fetchLabels();
+  }
+  async function deleteLabel(id: string) {
+    if (!confirm("Delete this label?")) return;
+    await fetch(`/api/labels/${id}`, { method: "DELETE" }); fetchLabels(); fetchConvos();
+  }
+  async function toggleLabel(convoId: string, labelId: string, has: boolean) {
+    await fetch(`/api/conversations/${convoId}/labels`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label_id: labelId, action: has ? "remove" : "add" }) });
+    fetchConvos(); setShowLabelMenu(null);
+  }
+
   // Escape key
   useEffect(() => {
     const h = (e: KeyboardEvent) => { if (e.key === "Escape") { setReplyTo(null); setChatMenuId(null); setMsgMenuId(null); setReactPickerId(null); setShowEmoji(false); setHeaderMenu(false); setImgPreview(null); setShowChatSearch(false); } };
@@ -168,7 +189,14 @@ export default function Dashboard() {
   function dl(d: string) { const t = new Date(d), n = new Date(); if (t.toDateString() === n.toDateString()) return "Today"; const y = new Date(n); y.setDate(y.getDate()-1); if (t.toDateString() === y.toDateString()) return "Yesterday"; return t.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric", year: "numeric" }); }
   function sd(m: Message[], i: number) { return i === 0 || new Date(m[i].created_at).toDateString() !== new Date(m[i-1].created_at).toDateString(); }
 
-  const filtered = convos.filter((c) => { if (!search) return true; const q = search.toLowerCase(); return c.name?.toLowerCase().includes(q) || c.phone.includes(q) || c.last_message?.toLowerCase().includes(q); });
+  const filtered = convos.filter((c) => {
+    // Search filter
+    if (search) { const q = search.toLowerCase(); if (!(c.name?.toLowerCase().includes(q) || c.phone.includes(q) || c.last_message?.toLowerCase().includes(q))) return false; }
+    // Tab filter
+    if (filter === "unread") return c.unread_count > 0;
+    if (filter !== "all") return c.labels?.some((l: Label) => l.id === filter); // label_id filter
+    return true;
+  });
 
   // Filter messages by chat search
   const displayMsgs = chatSearch ? msgs.filter((m) => m.content?.toLowerCase().includes(chatSearch.toLowerCase())) : msgs;
@@ -189,11 +217,27 @@ export default function Dashboard() {
 
   // Chat menu dropdown
   function ChatMenu({ convo, onClose }: { convo: ConversationWithLastMessage; onClose: () => void }) {
+    const [showLabels, setShowLabels] = useState(false);
     return (
-      <div className="absolute right-2 top-full mt-1 z-[100] bg-[#233138] rounded-xl shadow-2xl py-1.5 min-w-[190px] border border-white/[0.1] animate-in" onClick={(e) => e.stopPropagation()}>
+      <div className="absolute right-2 top-full mt-1 z-[100] bg-[#233138] rounded-xl shadow-2xl py-1.5 min-w-[190px] border border-white/[0.1]" onClick={(e) => e.stopPropagation()}>
         <MI i="📌" l={convo.is_pinned ? "Unpin chat" : "Pin chat"} o={() => { act(`/api/conversations/${convo.id}/pin`, { pinned: !convo.is_pinned }); onClose(); }}/>
         <MI i={convo.is_muted ? "🔔" : "🔕"} l={convo.is_muted ? "Unmute" : "Mute"} o={() => { act(`/api/conversations/${convo.id}/mute`, { muted: !convo.is_muted }); onClose(); }}/>
         <MI i="📩" l="Mark as unread" o={() => { act(`/api/conversations/${convo.id}/unread`, { unread_count: 1 }); onClose(); }}/>
+        <MI i="🏷️" l="Labels" o={() => setShowLabels(!showLabels)}/>
+        {showLabels && (
+          <div className="px-2 py-1.5 border-t border-white/[0.06]">
+            {labels.map((l) => {
+              const has = convo.labels?.some((cl: Label) => cl.id === l.id);
+              return (
+                <button key={l.id} onClick={() => toggleLabel(convo.id, l.id, !!has)} className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/[0.06] text-[12px]">
+                  <span className="w-3 h-3 rounded-full flex-shrink-0 border-2" style={{ background: has ? l.color : "transparent", borderColor: l.color }}/>
+                  <span className={has ? "text-white" : "text-white/50"}>{l.name}</span>
+                </button>
+              );
+            })}
+            {labels.length === 0 && <p className="text-[11px] text-white/30 px-2 py-1">No labels yet</p>}
+          </div>
+        )}
         <MI i="📦" l="Archive" o={() => { act(`/api/conversations/${convo.id}/archive`, { archived: true }); onClose(); }}/>
         <div className="h-px bg-white/[0.06] my-1"/>
         <MI i="🗑️" l="Delete chat" o={() => { delChat(convo.id); onClose(); }} d/>
@@ -244,6 +288,18 @@ export default function Dashboard() {
           {showSearch && <div className="relative mt-2.5"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2" className="absolute left-3 top-1/2 -translate-y-1/2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search chats..." className="w-full bg-white/[0.05] rounded-lg pl-9 pr-3 py-2 text-[13px] text-white placeholder:text-white/25 focus:outline-none border border-white/[0.06]" autoFocus/></div>}
         </div>
 
+        {/* Filter Tabs */}
+        <div className="px-3 py-2 border-b border-white/[0.06] flex gap-1.5 overflow-x-auto">
+          <button onClick={() => setFilter("all")} className={`px-3 py-1 rounded-full text-[11px] font-medium flex-shrink-0 transition-colors ${filter === "all" ? "bg-emerald-500/20 text-emerald-400" : "bg-white/[0.04] text-white/40 hover:text-white/60"}`}>All</button>
+          <button onClick={() => setFilter("unread")} className={`px-3 py-1 rounded-full text-[11px] font-medium flex-shrink-0 transition-colors ${filter === "unread" ? "bg-emerald-500/20 text-emerald-400" : "bg-white/[0.04] text-white/40 hover:text-white/60"}`}>Unread</button>
+          {labels.map((l) => (
+            <button key={l.id} onClick={() => setFilter(filter === l.id ? "all" : l.id)} className={`px-3 py-1 rounded-full text-[11px] font-medium flex-shrink-0 transition-colors flex items-center gap-1.5 ${filter === l.id ? "bg-white/[0.08] text-white/80" : "bg-white/[0.04] text-white/40 hover:text-white/60"}`}>
+              <span className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: l.color }}/>
+              {l.name}
+            </button>
+          ))}
+        </div>
+
         <div className="flex-1 overflow-y-auto">
           {filtered.length === 0 && <div className="flex flex-col items-center justify-center h-48 text-white/25 text-xs">{search ? "No results" : "No conversations yet"}</div>}
           {filtered.map((c) => {
@@ -258,8 +314,11 @@ export default function Dashboard() {
                       <span className={`text-[11px] flex-shrink-0 ml-2 ${c.unread_count > 0 ? "text-emerald-400" : "text-white/30"}`}>{ft(c.last_message_time || c.updated_at)}</span>
                     </div>
                     <div className="flex items-center justify-between mt-0.5">
-                      <p className={`text-[12px] truncate ${c.unread_count > 0 ? "text-white/60" : "text-white/35"}`}>{lmp(c)}</p>
+                      <div className="flex items-center gap-1 min-w-0">
+                        <p className={`text-[12px] truncate ${c.unread_count > 0 ? "text-white/60" : "text-white/35"}`}>{lmp(c)}</p>
+                      </div>
                       <div className="flex items-center gap-1 flex-shrink-0 ml-2">
+                        {c.labels?.map((l: Label) => <span key={l.id} className="w-2 h-2 rounded-full flex-shrink-0" style={{ background: l.color }} title={l.name}/>)}
                         {c.is_pinned && <span className="text-[10px]">📌</span>}
                         {c.is_muted && <span className="text-[10px]">🔕</span>}
                         {c.unread_count > 0 && <span className="min-w-[18px] h-[18px] rounded-full bg-emerald-500 text-white text-[10px] font-bold flex items-center justify-center px-1">{c.unread_count}</span>}
@@ -304,6 +363,27 @@ export default function Dashboard() {
               ))}
             </div>
           )}
+
+          {/* ═══ LABELS MANAGEMENT ═══ */}
+          {user.role === "admin" && (
+            <div className="border-t border-white/[0.06]">
+              <div className="px-4 py-2.5">
+                <p className="text-[11px] text-white/30 font-medium mb-2">MANAGE LABELS</p>
+                <div className="flex gap-1.5 mb-2">
+                  <input type="text" value={newLabelName} onChange={(e) => setNewLabelName(e.target.value)} placeholder="New label..." onKeyDown={(e) => e.key === "Enter" && createLabel()} className="flex-1 bg-[#2a3942] rounded px-2.5 py-1.5 text-[12px] text-white placeholder:text-white/25 focus:outline-none border border-white/[0.06] min-w-0"/>
+                  <input type="color" value={newLabelColor} onChange={(e) => setNewLabelColor(e.target.value)} className="w-7 h-7 rounded cursor-pointer bg-transparent border-0 p-0"/>
+                  <button onClick={createLabel} disabled={!newLabelName.trim()} className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-30 rounded text-[11px] text-white font-medium flex-shrink-0">+</button>
+                </div>
+                {labels.map((l) => (
+                  <div key={l.id} className="flex items-center gap-2 py-1 group/label">
+                    <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: l.color }}/>
+                    <span className="text-[12px] text-white/60 flex-1">{l.name}</span>
+                    <button onClick={() => deleteLabel(l.id)} className="text-[10px] text-red-400/0 group-hover/label:text-red-400/70 hover:!text-red-400 transition-colors">✕</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -333,6 +413,20 @@ export default function Dashboard() {
                       <MI i="📌" l={sel.is_pinned ? "Unpin chat" : "Pin chat"} o={() => act(`/api/conversations/${sel.id}/pin`, { pinned: !sel.is_pinned })}/>
                       <MI i={sel.is_muted ? "🔔" : "🔕"} l={sel.is_muted ? "Unmute" : "Mute"} o={() => act(`/api/conversations/${sel.id}/mute`, { muted: !sel.is_muted })}/>
                       <MI i="📩" l="Mark as unread" o={() => act(`/api/conversations/${sel.id}/unread`, { unread_count: 1 })}/>
+                      <MI i="🏷️" l="Labels" o={() => { setShowLabelMenu(showLabelMenu === sel.id ? null : sel.id); }}/>
+                      {showLabelMenu === sel.id && (
+                        <div className="px-2 py-1.5 border-t border-white/[0.06]">
+                          {labels.map((l) => {
+                            const has = sel.labels?.some((cl: Label) => cl.id === l.id);
+                            return (
+                              <button key={l.id} onClick={() => toggleLabel(sel.id, l.id, !!has)} className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/[0.06] text-[12px]">
+                                <span className="w-3 h-3 rounded-full flex-shrink-0 border-2" style={{ background: has ? l.color : "transparent", borderColor: l.color }}/>
+                                <span className={has ? "text-white" : "text-white/50"}>{l.name}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
                       <MI i="📦" l="Archive" o={() => { act(`/api/conversations/${sel.id}/archive`, { archived: true }); if (selId === sel.id) { setSelId(null); setMsgs([]); } }}/>
                       <div className="h-px bg-white/[0.06] my-1"/>
                       <MI i="🗑️" l="Delete chat" o={() => delChat(sel.id)} d/>

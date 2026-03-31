@@ -60,6 +60,13 @@ export interface ConversationWithLastMessage extends Conversation {
   last_message_type: MessageType | null;
   last_message_role: "user" | "assistant" | null;
   last_message_time: string | null;
+  labels: Label[];
+}
+
+export interface Label {
+  id: string;
+  name: string;
+  color: string;
 }
 
 // WhatsApp Cloud API webhook payload types

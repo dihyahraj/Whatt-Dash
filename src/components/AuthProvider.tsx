@@ -115,9 +115,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   function signOut() {
     if (!confirm("Logout karna hai?")) return;
-    if (supabase) supabase.auth.signOut();
+    // Clear user immediately
     setUser(null);
-    window.location.href = "/login";
+    // Sign out from Supabase
+    if (supabase) {
+      supabase.auth.signOut().finally(() => {
+        window.location.replace("/login");
+      });
+    } else {
+      window.location.replace("/login");
+    }
   }
 
   return (
