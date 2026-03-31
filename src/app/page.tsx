@@ -21,11 +21,6 @@ export default function Dashboard() {
   const { user, loading: authLoading, signOut } = useAuth();
   const router = useRouter();
 
-  // Redirect to login if not authenticated
-  useEffect(() => {
-    if (!authLoading && !user) router.push("/login");
-  }, [authLoading, user, router]);
-
   const supabase = useMemo(() => {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -206,11 +201,16 @@ export default function Dashboard() {
     );
   }
 
-  if (authLoading || !user) return (
+  if (authLoading) return (
     <div className="min-h-screen bg-[#0b141a] flex items-center justify-center">
       <div className="animate-spin w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full"/>
     </div>
   );
+
+  if (!user) {
+    if (typeof window !== "undefined") window.location.href = "/login";
+    return null;
+  }
 
   return (
     <div className="flex h-screen bg-[#0b0b0b] overflow-hidden select-none" style={{ fontFamily: "'Segoe UI', Helvetica, Arial, sans-serif" }}>

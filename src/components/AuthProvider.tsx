@@ -41,28 +41,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return createClient(url, key);
   }, []);
 
-  // Check if email is in allowed_users and get role
   async function checkAllowed(sb: SupabaseClient, authUser: User): Promise<AuthUser | null> {
-    const { data, error } = await sb
-      .from("allowed_users")
-      .select("email, display_name, role")
-      .eq("email", authUser.email)
-      .eq("is_active", true)
-      .single();
+    try {
+      const { data, error } = await sb
+        .from("allowed_users")
+        .select("email, display_name, role")
+        .eq("email", authUser.email)
+        .eq("is_active", true)
+        .single();
 
-    if (error || !data) return null;
+      if (error || !data) return null;
 
-    return {
-      id: authUser.id,
-      email: data.email,
-      display_name: data.display_name || authUser.email?.split("@")[0] || "User",
-      role: data.role as "admin" | "user",
-    };
+      return {
+        id: authUser.id,
+        email: data.email,
+        display_name: data.display_name || authUser.email?.split("@")[0] || "User",
+        role: data.role as "admin" | "user",
+      };
+    } catch {
+      return null;
+    }
   }
 
-  // On mount: check existing session
+  // On mount: check session with timeout
   useEffect(() => {
     if (!supabase) { setLoading(false); return; }
+
+    // Safety timeout — never show spinner more than 5s
+    const timeout = setTimeout(() => {
+      setLoading(false);
+    }, 5000);
 
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (session?.user) {
@@ -70,14 +78,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (allowed) {
           setUser(allowed);
         } else {
-          // User authenticated but not in allowed_users — sign them out
           await supabase.auth.signOut();
+          setUser(null);
         }
       }
+      clearTimeout(timeout);
+      setLoading(false);
+    }).catch(() => {
+      clearTimeout(timeout);
       setLoading(false);
     });
 
-    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
       if (session?.user) {
         const allowed = await checkAllowed(supabase, session.user);
@@ -87,14 +98,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => { clearTimeout(timeout); subscription.unsubscribe(); };
   }, [supabase]);
 
-  // Sign in
   async function signIn(email: string, password: string): Promise<{ error?: string }> {
     if (!supabase) return { error: "Supabase not configured" };
 
-    // First check if email is allowed
     const { data: allowedCheck } = await supabase
       .from("allowed_users")
       .select("email, is_active")
@@ -104,12 +113,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!allowedCheck) return { error: "Access denied. Your email is not authorized." };
     if (!allowedCheck.is_active) return { error: "Your account has been deactivated." };
 
-    // Try to sign in
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
-    if (error) {
-      return { error: "Invalid email or password." };
-    }
+    if (error) return { error: "Invalid email or password." };
 
     if (data.user) {
       const allowed = await checkAllowed(supabase, data.user);
@@ -120,10 +126,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: "Login failed." };
   }
 
-  // Sign out
   async function signOut() {
-    if (supabase) await supabase.auth.signOut();
+    try {
+      if (supabase) await supabase.auth.signOut();
+    } catch {
+      // Ignore signout errors
+    }
     setUser(null);
+    // Force redirect to login
+    window.location.href = "/login";
   }
 
   return (
