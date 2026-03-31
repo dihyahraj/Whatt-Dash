@@ -40,6 +40,8 @@ export default function Dashboard() {
   const [headerMenu, setHeaderMenu] = useState(false);
   const [chatSearch, setChatSearch] = useState("");
   const [showChatSearch, setShowChatSearch] = useState(false);
+  const [archived, setArchived] = useState<ConversationWithLastMessage[]>([]);
+  const [showArchived, setShowArchived] = useState(false);
 
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -48,19 +50,39 @@ export default function Dashboard() {
   // Fetch
   const fetchConvos = useCallback(async () => { try { const r = await fetch("/api/conversations"); const d = await r.json(); if (Array.isArray(d)) setConvos(d); } catch {} }, []);
   const fetchMsgs = useCallback(async (id: string) => { try { const r = await fetch(`/api/conversations/${id}/messages`); const d = await r.json(); if (Array.isArray(d)) setMsgs(d); } catch {} }, []);
+  const fetchArchived = useCallback(async () => { try { const r = await fetch("/api/conversations/archived"); const d = await r.json(); if (Array.isArray(d)) setArchived(d); } catch {} }, []);
 
-  useEffect(() => { fetchConvos(); }, [fetchConvos]);
+  useEffect(() => { fetchConvos(); fetchArchived(); }, [fetchConvos, fetchArchived]);
   useEffect(() => { if (selId) { fetchMsgs(selId); fetch(`/api/conversations/${selId}/read`, { method: "POST" }).catch(() => {}); setConvos((p) => p.map((c) => c.id === selId ? { ...c, unread_count: 0 } : c)); } }, [selId, fetchMsgs]);
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs]);
 
-  // Poll 3s
-  useEffect(() => { const iv = setInterval(() => { fetchConvos(); if (selId) fetchMsgs(selId); }, 3000); return () => clearInterval(iv); }, [fetchConvos, fetchMsgs, selId]);
+  // Poll 2s + always mark as read if chat open
+  useEffect(() => {
+    const iv = setInterval(() => {
+      fetchConvos();
+      if (selId) {
+        fetchMsgs(selId);
+        // Always mark read while chat is open
+        fetch(`/api/conversations/${selId}/read`, { method: "POST" }).catch(() => {});
+        setConvos((p) => p.map((c) => c.id === selId ? { ...c, unread_count: 0 } : c));
+      }
+    }, 2000);
+    return () => clearInterval(iv);
+  }, [fetchConvos, fetchMsgs, selId]);
 
   // Realtime
   useEffect(() => {
     if (!supabase) return;
     const ch = supabase.channel("rt")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (p) => { const m = p.new as Message; if (m.conversation_id === selId) setMsgs((prev) => prev.some((x) => x.id === m.id) ? prev : [...prev, m]); fetchConvos(); })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (p) => {
+        const m = p.new as Message;
+        if (m.conversation_id === selId) {
+          setMsgs((prev) => prev.some((x) => x.id === m.id) ? prev : [...prev, m]);
+          // Immediately mark as read since user is viewing this chat
+          fetch(`/api/conversations/${selId}/read`, { method: "POST" }).catch(() => {});
+        }
+        fetchConvos();
+      })
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "messages" }, (p) => { const u = p.new as Message; setMsgs((prev) => prev.map((m) => m.id === u.id ? u : m)); })
       .on("postgres_changes", { event: "*", schema: "public", table: "conversations" }, () => fetchConvos())
       .subscribe();
@@ -84,8 +106,9 @@ export default function Dashboard() {
   }
 
   // Chat actions
-  async function act(url: string, body?: object) { await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined }); fetchConvos(); setChatMenuId(null); setHeaderMenu(false); }
-  async function delChat(id: string) { if (!confirm("Puri chat delete hogi!")) return; await fetch(`/api/conversations/${id}/delete`, { method: "POST" }); if (selId === id) { setSelId(null); setMsgs([]); } fetchConvos(); setChatMenuId(null); setHeaderMenu(false); }
+  async function act(url: string, body?: object) { await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined }); fetchConvos(); fetchArchived(); setChatMenuId(null); setHeaderMenu(false); }
+  async function delChat(id: string) { if (!confirm("Puri chat delete hogi! Supabase se bhi mit jayegi.")) return; await fetch(`/api/conversations/${id}/delete`, { method: "POST" }); if (selId === id) { setSelId(null); setMsgs([]); } fetchConvos(); fetchArchived(); setChatMenuId(null); setHeaderMenu(false); }
+  async function unarchive(id: string) { await fetch(`/api/conversations/${id}/archive`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ archived: false }) }); fetchConvos(); fetchArchived(); }
   async function delMsg(id: string) { await fetch(`/api/messages/${id}/delete`, { method: "POST" }); setMsgs((p) => p.map((m) => m.id === id ? { ...m, is_deleted: true, content: "🚫 This message was deleted" } : m)); setMsgMenuId(null); }
   async function starMsg(id: string, v: boolean) { await fetch(`/api/messages/${id}/star`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ starred: v }) }); setMsgs((p) => p.map((m) => m.id === id ? { ...m, is_starred: v } : m)); setMsgMenuId(null); }
   async function reactMsg(msgId: string, emoji: string) {
@@ -202,6 +225,30 @@ export default function Dashboard() {
               </div>
             );
           })}
+
+          {/* ═══ ARCHIVED ═══ */}
+          {archived.length > 0 && (
+            <div className="border-t border-white/[0.06]">
+              <button onClick={() => { setShowArchived(!showArchived); if (!showArchived) fetchArchived(); }} className="w-full flex items-center gap-3 px-4 py-3 text-white/50 hover:bg-white/[0.03]">
+                <span>📦</span>
+                <span className="text-[13px] font-medium">Archived ({archived.length})</span>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`ml-auto transition-transform ${showArchived ? "rotate-180" : ""}`}><path d="M6 9l6 6 6-6"/></svg>
+              </button>
+              {showArchived && archived.map((ac) => (
+                <div key={ac.id} className="flex items-center px-3 py-2.5 hover:bg-white/[0.03]">
+                  <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${aclr(ac.id)} flex items-center justify-center flex-shrink-0 text-white text-[12px] font-bold opacity-60`}>{ini(ac.name, ac.phone)}</div>
+                  <div className="flex-1 min-w-0 ml-3 cursor-pointer" onClick={() => setSelId(ac.id)}>
+                    <span className="text-[13px] text-white/50 truncate block">{ac.name || ac.phone}</span>
+                    <p className="text-[11px] text-white/30 truncate">{lmp(ac)}</p>
+                  </div>
+                  <div className="flex gap-1 ml-2 flex-shrink-0">
+                    <button onClick={() => unarchive(ac.id)} className="px-2 py-1 text-[10px] bg-emerald-600/20 text-emerald-400 rounded hover:bg-emerald-600/30 font-medium">Unarchive</button>
+                    <button onClick={() => delChat(ac.id)} className="px-2 py-1 text-[10px] bg-red-600/20 text-red-400 rounded hover:bg-red-600/30 font-medium">Delete</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
