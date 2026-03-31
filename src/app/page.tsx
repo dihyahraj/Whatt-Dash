@@ -32,7 +32,8 @@ export default function Dashboard() {
   const [selId, setSelId] = useState<string | null>(null);
   const [msgs, setMsgs] = useState<Message[]>([]);
   const [input, setInput] = useState("");
-  const [sending, setSending] = useState(false);
+  const [sending, setSendingState] = useState(false);
+  const setSending = (v: boolean) => { sendingRef.current = v; setSendingState(v); };
   const [search, setSearch] = useState("");
   const [showSearch, setShowSearch] = useState(false);
   const [replyTo, setReplyTo] = useState<Message | null>(null);
@@ -69,20 +70,15 @@ export default function Dashboard() {
 
   // Fetch
   const fetchConvos = useCallback(async () => { try { const r = await fetch("/api/conversations"); const d = await r.json(); if (Array.isArray(d)) setConvos(d); } catch {} }, []);
+  const sendingRef = useRef(false);
+
   const fetchMsgs = useCallback(async (id: string) => {
+    // Don't overwrite while sending (optimistic msg would duplicate)
+    if (sendingRef.current) return;
     try {
       const r = await fetch(`/api/conversations/${id}/messages`);
       const d = await r.json();
-      if (Array.isArray(d)) {
-        // Keep optimistic temp messages that haven't been replaced yet
-        setMsgs((prev) => {
-          const tempMsgs = prev.filter((m) => m.id.startsWith("temp_"));
-          // Merge: server msgs + temp msgs (that aren't duplicates)
-          const serverIds = new Set(d.map((m: Message) => m.id));
-          const keepTemps = tempMsgs.filter((t) => !serverIds.has(t.id));
-          return [...d, ...keepTemps];
-        });
-      }
+      if (Array.isArray(d)) setMsgs(d);
     } catch {}
   }, []);
   const fetchArchived = useCallback(async () => { try { const r = await fetch("/api/conversations/archived"); const d = await r.json(); if (Array.isArray(d)) setArchived(d); } catch {} }, []);
@@ -158,10 +154,22 @@ export default function Dashboard() {
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (p) => {
         const m = p.new as Message;
         if (m.conversation_id === selId) {
-          setMsgs((prev) => prev.some((x) => x.id === m.id) ? prev : [...prev, m]);
-          fetch(`/api/conversations/${selId}/read`, { method: "POST" }).catch(() => {});
+          setMsgs((prev) => {
+            // If already exists, skip
+            if (prev.some((x) => x.id === m.id)) return prev;
+            // If there's a temp msg with same content, replace it (optimistic → real)
+            const tempIdx = prev.findIndex((x) => x.id.startsWith("temp_") && x.content === m.content && x.role === m.role);
+            if (tempIdx >= 0) {
+              const updated = [...prev];
+              updated[tempIdx] = m;
+              return updated;
+            }
+            // Skip adding our own sent messages while still sending (temp already showing)
+            if (m.role === "assistant" && sendingRef.current) return prev;
+            return [...prev, m];
+          });
+          if (m.role === "user") fetch(`/api/conversations/${selId}/read`, { method: "POST" }).catch(() => {});
         }
-        // Notify for incoming messages (not own messages)
         if (m.role === "user") notifyNewMsg(m);
         fetchConvos();
       })
