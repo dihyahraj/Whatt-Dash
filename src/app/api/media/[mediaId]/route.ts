@@ -18,7 +18,7 @@ export async function GET(
     return new Response("Failed to download media", { status: 500 });
   }
 
-  return new Response(buffer, {
+  return new Response(new Uint8Array(buffer), {
     headers: {
       "Content-Type": "application/octet-stream",
       "Cache-Control": "public, max-age=86400",
