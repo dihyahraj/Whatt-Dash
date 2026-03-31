@@ -115,14 +115,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   function signOut() {
     if (!confirm("Logout karna hai?")) return;
-    // Clear user immediately
     setUser(null);
-    // Sign out from Supabase
+    // Clear Supabase session completely
     if (supabase) {
-      supabase.auth.signOut().finally(() => {
+      supabase.auth.signOut().then(() => {
+        // Also clear any localStorage tokens manually
+        Object.keys(localStorage).forEach((k) => {
+          if (k.startsWith("sb-")) localStorage.removeItem(k);
+        });
         window.location.replace("/login");
       });
     } else {
+      Object.keys(localStorage).forEach((k) => {
+        if (k.startsWith("sb-")) localStorage.removeItem(k);
+      });
       window.location.replace("/login");
     }
   }
