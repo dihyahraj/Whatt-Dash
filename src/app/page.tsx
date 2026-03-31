@@ -69,7 +69,22 @@ export default function Dashboard() {
 
   // Fetch
   const fetchConvos = useCallback(async () => { try { const r = await fetch("/api/conversations"); const d = await r.json(); if (Array.isArray(d)) setConvos(d); } catch {} }, []);
-  const fetchMsgs = useCallback(async (id: string) => { try { const r = await fetch(`/api/conversations/${id}/messages`); const d = await r.json(); if (Array.isArray(d)) setMsgs(d); } catch {} }, []);
+  const fetchMsgs = useCallback(async (id: string) => {
+    try {
+      const r = await fetch(`/api/conversations/${id}/messages`);
+      const d = await r.json();
+      if (Array.isArray(d)) {
+        // Keep optimistic temp messages that haven't been replaced yet
+        setMsgs((prev) => {
+          const tempMsgs = prev.filter((m) => m.id.startsWith("temp_"));
+          // Merge: server msgs + temp msgs (that aren't duplicates)
+          const serverIds = new Set(d.map((m: Message) => m.id));
+          const keepTemps = tempMsgs.filter((t) => !serverIds.has(t.id));
+          return [...d, ...keepTemps];
+        });
+      }
+    } catch {}
+  }, []);
   const fetchArchived = useCallback(async () => { try { const r = await fetch("/api/conversations/archived"); const d = await r.json(); if (Array.isArray(d)) setArchived(d); } catch {} }, []);
   const fetchLabels = useCallback(async () => { try { const r = await fetch("/api/labels"); const d = await r.json(); if (Array.isArray(d)) setLabels(d); } catch {} }, []);
 
@@ -111,7 +126,32 @@ export default function Dashboard() {
     return () => clearInterval(iv);
   }, [fetchConvos, fetchMsgs, selId]);
 
-  // Realtime
+  // Realtime + Notifications
+
+  // Notification helper
+  function notifyNewMsg(msg: Message) {
+    const c = convos.find((x) => x.id === msg.conversation_id);
+    const title = c?.name || c?.phone || "New Message";
+    const body = msg.content?.substring(0, 100) || "New message";
+    // Browser notification
+    if ("Notification" in window && Notification.permission === "granted") {
+      new Notification(title, { body, icon: "/favicon.ico", tag: msg.conversation_id });
+    }
+    // Sound - WhatsApp-like notification beep
+    try {
+      const ctx = new AudioContext();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = 800;
+      gain.gain.value = 0.3;
+      osc.start();
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+      osc.stop(ctx.currentTime + 0.3);
+    } catch {}
+  }
+
   useEffect(() => {
     if (!supabase) return;
     const ch = supabase.channel("rt")
@@ -119,9 +159,10 @@ export default function Dashboard() {
         const m = p.new as Message;
         if (m.conversation_id === selId) {
           setMsgs((prev) => prev.some((x) => x.id === m.id) ? prev : [...prev, m]);
-          // Immediately mark as read since user is viewing this chat
           fetch(`/api/conversations/${selId}/read`, { method: "POST" }).catch(() => {});
         }
+        // Notify for incoming messages (not own messages)
+        if (m.role === "user") notifyNewMsg(m);
         fetchConvos();
       })
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "messages" }, (p) => { const u = p.new as Message; setMsgs((prev) => prev.map((m) => m.id === u.id ? u : m)); })
@@ -131,6 +172,12 @@ export default function Dashboard() {
   }, [selId, fetchConvos, supabase]);
 
   useEffect(() => { if ("Notification" in window && Notification.permission === "default") Notification.requestPermission(); }, []);
+
+  // Tab title with unread count
+  useEffect(() => {
+    const total = convos.reduce((s, c) => s + (c.unread_count || 0), 0);
+    document.title = total > 0 ? `(${total}) Whatt Dash` : "Whatt Dash";
+  }, [convos]);
 
   // Send
   async function handleSend() {
