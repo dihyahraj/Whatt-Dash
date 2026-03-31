@@ -108,18 +108,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
-      // If user doesn't exist in auth yet, sign them up (first login)
-      if (error.message.includes("Invalid login")) {
-        // Try signup
-        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({ email, password });
-        if (signUpError) return { error: signUpError.message };
-        if (signUpData.user) {
-          const allowed = await checkAllowed(supabase, signUpData.user);
-          if (allowed) { setUser(allowed); return {}; }
-        }
-        return { error: "Account created. Check your email to confirm, then sign in." };
-      }
-      return { error: error.message };
+      return { error: "Invalid email or password." };
     }
 
     if (data.user) {
