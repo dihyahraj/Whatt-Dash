@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@/components/AuthProvider";
 import { useRouter } from "next/navigation";
+
+const OWNER_EMAIL = "bioshop.pk@gmail.com";
 
 interface AllowedUser {
   id: string;
@@ -25,56 +27,64 @@ export default function AdminPage() {
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
 
-  // Redirect if not admin
   useEffect(() => {
     if (!loading && (!user || user.role !== "admin")) router.push("/");
   }, [user, loading, router]);
 
-  // Fetch users
-  async function fetchUsers() {
+  const fetchUsers = useCallback(async () => {
     if (!supabase) return;
-    const { data } = await supabase.from("allowed_users").select("*").order("created_at", { ascending: true });
+    const { data, error } = await supabase.from("allowed_users").select("*").order("created_at", { ascending: true });
+    if (error) console.error("Fetch users error:", error);
     if (data) setUsers(data);
-  }
+  }, [supabase]);
 
-  useEffect(() => { fetchUsers(); }, [supabase]);
+  useEffect(() => { fetchUsers(); }, [fetchUsers]);
 
-  // Add user
   async function handleAdd(e: React.FormEvent) {
     e.preventDefault();
     if (!supabase || !newEmail || !newPassword) return;
+    if (newPassword.length < 6) { setErr("Password must be at least 6 characters"); return; }
     setErr(""); setMsg(""); setBusy(true);
 
     try {
-      // 1. Create auth user via admin API endpoint
       const res = await fetch("/api/admin/create-user", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: newEmail.toLowerCase().trim(), password: newPassword, display_name: newName || null, role: newRole }),
+        body: JSON.stringify({ email: newEmail.toLowerCase().trim(), password: newPassword, display_name: newName.trim() || null, role: newRole }),
       });
       const data = await res.json();
       if (!res.ok) { setErr(data.error || "Failed to create user"); setBusy(false); return; }
 
-      setMsg(`User ${newEmail} created!`);
+      setMsg(`✅ User "${newEmail}" created successfully as ${newRole}!`);
       setNewEmail(""); setNewName(""); setNewPassword(""); setNewRole("user");
-      fetchUsers();
+      // Refresh user list
+      await fetchUsers();
     } catch (e) { setErr(String(e)); }
     finally { setBusy(false); }
   }
 
-  // Toggle active
   async function toggleActive(u: AllowedUser) {
-    if (!supabase) return;
-    await supabase.from("allowed_users").update({ is_active: !u.is_active }).eq("id", u.id);
-    fetchUsers();
+    if (!supabase || u.email === OWNER_EMAIL) return;
+    const { error } = await supabase.from("allowed_users").update({ is_active: !u.is_active }).eq("id", u.id);
+    if (error) { alert("Error: " + error.message); return; }
+    await fetchUsers();
   }
 
-  // Delete user
+  async function changeRole(u: AllowedUser, newRole: string) {
+    if (!supabase || u.email === OWNER_EMAIL) return;
+    const { error } = await supabase.from("allowed_users").update({ role: newRole }).eq("id", u.id);
+    if (error) { alert("Error: " + error.message); return; }
+    await fetchUsers();
+  }
+
   async function deleteUser(u: AllowedUser) {
-    if (!confirm(`Delete ${u.email}?`)) return;
+    if (u.email === OWNER_EMAIL) { alert("Owner account cannot be deleted!"); return; }
+    if (!confirm(`Delete user "${u.display_name || u.email}"?\n\nThis will remove their access permanently.`)) return;
     if (!supabase) return;
-    await supabase.from("allowed_users").delete().eq("id", u.id);
-    fetchUsers();
+    const { error } = await supabase.from("allowed_users").delete().eq("id", u.id);
+    if (error) { alert("Error: " + error.message); return; }
+    setMsg(`🗑️ User "${u.email}" deleted.`);
+    await fetchUsers();
   }
 
   if (loading || !user || user.role !== "admin") return (
@@ -100,36 +110,44 @@ export default function AdminPage() {
       </div>
 
       <div className="max-w-[700px] mx-auto px-6 py-8">
+
+        {/* Global messages */}
+        {msg && <div className="mb-4 px-4 py-3 bg-emerald-500/10 border border-emerald-500/20 rounded-xl text-[13px] text-emerald-400 flex items-center justify-between">
+          <span>{msg}</span>
+          <button onClick={() => setMsg("")} className="text-emerald-400/50 hover:text-emerald-400 ml-3">✕</button>
+        </div>}
+
         {/* Add User Form */}
         <div className="bg-[#111b21] rounded-xl border border-white/[0.06] p-6 mb-6">
-          <h2 className="text-[15px] font-semibold mb-4">Add New User</h2>
+          <h2 className="text-[15px] font-semibold mb-4 flex items-center gap-2">
+            <span>➕</span> Add New User
+          </h2>
           <form onSubmit={handleAdd} className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="block text-[11px] text-white/40 mb-1">Email *</label>
-                <input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="user@example.com" required className="w-full bg-[#2a3942] rounded-lg px-3 py-2.5 text-[13px] text-white placeholder:text-white/25 focus:outline-none border border-white/[0.06]"/>
+                <input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="user@example.com" required className="w-full bg-[#2a3942] rounded-lg px-3 py-2.5 text-[13px] text-white placeholder:text-white/25 focus:outline-none border border-white/[0.06] focus:border-emerald-500/30"/>
               </div>
               <div>
-                <label className="block text-[11px] text-white/40 mb-1">Name</label>
-                <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Display name" className="w-full bg-[#2a3942] rounded-lg px-3 py-2.5 text-[13px] text-white placeholder:text-white/25 focus:outline-none border border-white/[0.06]"/>
+                <label className="block text-[11px] text-white/40 mb-1">Display Name</label>
+                <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="Name" className="w-full bg-[#2a3942] rounded-lg px-3 py-2.5 text-[13px] text-white placeholder:text-white/25 focus:outline-none border border-white/[0.06] focus:border-emerald-500/30"/>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-[11px] text-white/40 mb-1">Password *</label>
-                <input type="text" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Min 6 characters" required minLength={6} className="w-full bg-[#2a3942] rounded-lg px-3 py-2.5 text-[13px] text-white placeholder:text-white/25 focus:outline-none border border-white/[0.06]"/>
+                <label className="block text-[11px] text-white/40 mb-1">Password * (min 6 chars)</label>
+                <input type="text" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Strong password" required minLength={6} className="w-full bg-[#2a3942] rounded-lg px-3 py-2.5 text-[13px] text-white placeholder:text-white/25 focus:outline-none border border-white/[0.06] focus:border-emerald-500/30"/>
               </div>
               <div>
                 <label className="block text-[11px] text-white/40 mb-1">Role</label>
                 <select value={newRole} onChange={(e) => setNewRole(e.target.value as "user" | "admin")} className="w-full bg-[#2a3942] rounded-lg px-3 py-2.5 text-[13px] text-white focus:outline-none border border-white/[0.06]">
-                  <option value="user">User</option>
-                  <option value="admin">Admin</option>
+                  <option value="user">User — Can view & reply chats</option>
+                  <option value="admin">Admin — Can manage users too</option>
                 </select>
               </div>
             </div>
             {err && <p className="text-[12px] text-red-400 bg-red-500/10 px-3 py-2 rounded-lg">{err}</p>}
-            {msg && <p className="text-[12px] text-emerald-400 bg-emerald-500/10 px-3 py-2 rounded-lg">{msg}</p>}
-            <button type="submit" disabled={busy || !newEmail || !newPassword} className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-medium py-2.5 px-5 rounded-lg text-[13px]">
+            <button type="submit" disabled={busy || !newEmail || !newPassword} className="bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-medium py-2.5 px-6 rounded-lg text-[13px] transition-colors">
               {busy ? "Creating..." : "Create User"}
             </button>
           </form>
@@ -137,32 +155,59 @@ export default function AdminPage() {
 
         {/* Users List */}
         <div className="bg-[#111b21] rounded-xl border border-white/[0.06] overflow-hidden">
-          <div className="px-6 py-4 border-b border-white/[0.06]">
-            <h2 className="text-[15px] font-semibold">Users ({users.length})</h2>
+          <div className="px-6 py-4 border-b border-white/[0.06] flex items-center justify-between">
+            <h2 className="text-[15px] font-semibold">All Users ({users.length})</h2>
+            <button onClick={fetchUsers} className="text-[11px] text-white/30 hover:text-white/60 px-2 py-1 rounded hover:bg-white/[0.04]">↻ Refresh</button>
           </div>
-          {users.map((u) => (
-            <div key={u.id} className="flex items-center px-6 py-3 border-b border-white/[0.04] hover:bg-white/[0.02]">
-              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-600 to-teal-700 flex items-center justify-center text-white text-[12px] font-bold flex-shrink-0">
-                {(u.display_name || u.email).slice(0, 2).toUpperCase()}
-              </div>
-              <div className="flex-1 min-w-0 ml-3">
-                <div className="flex items-center gap-2">
-                  <span className="text-[13px] font-medium text-white">{u.display_name || u.email}</span>
-                  <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${u.role === "admin" ? "bg-amber-500/20 text-amber-400" : "bg-blue-500/20 text-blue-400"}`}>{u.role}</span>
-                  {!u.is_active && <span className="text-[10px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400">Disabled</span>}
+          
+          {users.length === 0 && (
+            <div className="px-6 py-8 text-center text-white/25 text-[13px]">No users found. Create one above.</div>
+          )}
+
+          {users.map((u) => {
+            const isOwner = u.email === OWNER_EMAIL;
+            const isSelf = u.email === user.email;
+            return (
+              <div key={u.id} className="flex items-center px-6 py-3.5 border-b border-white/[0.04] hover:bg-white/[0.02]">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-600 to-teal-700 flex items-center justify-center text-white text-[12px] font-bold flex-shrink-0">
+                  {(u.display_name || u.email).slice(0, 2).toUpperCase()}
                 </div>
-                <p className="text-[11px] text-white/35">{u.email}</p>
-              </div>
-              {u.email !== user.email && (
-                <div className="flex gap-2 flex-shrink-0 ml-3">
-                  <button onClick={() => toggleActive(u)} className={`px-2.5 py-1 text-[11px] rounded font-medium ${u.is_active ? "bg-amber-600/20 text-amber-400 hover:bg-amber-600/30" : "bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30"}`}>
-                    {u.is_active ? "Disable" : "Enable"}
-                  </button>
-                  <button onClick={() => deleteUser(u)} className="px-2.5 py-1 text-[11px] bg-red-600/20 text-red-400 rounded hover:bg-red-600/30 font-medium">Delete</button>
+                <div className="flex-1 min-w-0 ml-3">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[13px] font-medium text-white">{u.display_name || u.email.split("@")[0]}</span>
+                    {isOwner && <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-bold">OWNER</span>}
+                    <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold ${u.role === "admin" ? "bg-amber-500/20 text-amber-400" : "bg-blue-500/20 text-blue-400"}`}>{u.role.toUpperCase()}</span>
+                    {!u.is_active && <span className="text-[9px] px-1.5 py-0.5 rounded bg-red-500/20 text-red-400 font-bold">DISABLED</span>}
+                    {isSelf && <span className="text-[9px] text-white/30">(you)</span>}
+                  </div>
+                  <p className="text-[11px] text-white/35 mt-0.5">{u.email}</p>
                 </div>
-              )}
-            </div>
-          ))}
+
+                {/* Actions — not shown for owner */}
+                {!isOwner && (
+                  <div className="flex items-center gap-2 flex-shrink-0 ml-3">
+                    {/* Role toggle */}
+                    <select
+                      value={u.role}
+                      onChange={(e) => changeRole(u, e.target.value)}
+                      className="bg-[#2a3942] text-[11px] text-white/70 rounded px-2 py-1 border border-white/[0.06] focus:outline-none"
+                    >
+                      <option value="user">User</option>
+                      <option value="admin">Admin</option>
+                    </select>
+
+                    <button onClick={() => toggleActive(u)} className={`px-2.5 py-1 text-[11px] rounded font-medium transition-colors ${u.is_active ? "bg-amber-600/20 text-amber-400 hover:bg-amber-600/30" : "bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30"}`}>
+                      {u.is_active ? "Disable" : "Enable"}
+                    </button>
+
+                    <button onClick={() => deleteUser(u)} className="px-2.5 py-1 text-[11px] bg-red-600/20 text-red-400 rounded hover:bg-red-600/30 font-medium transition-colors">
+                      Delete
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
