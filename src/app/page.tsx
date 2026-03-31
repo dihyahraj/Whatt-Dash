@@ -135,14 +135,44 @@ export default function Dashboard() {
   // Send
   async function handleSend() {
     if (!input.trim() || !selId || sending) return;
+    const text = input.trim();
+    const reply = replyTo;
+    
+    // Optimistic: show message immediately
+    const tempId = `temp_${Date.now()}`;
+    const optimisticMsg: Message = {
+      id: tempId, conversation_id: selId, role: "assistant", content: text,
+      message_type: "text", media_url: null, media_mime_type: null, media_filename: null,
+      media_caption: null, media_sha256: null, reply_to_id: reply?.id || null,
+      reaction: null, reaction_msg_id: null, latitude: null, longitude: null,
+      location_name: null, location_address: null, whatsapp_msg_id: null,
+      is_deleted: false, is_starred: false, status: "sent",
+      created_at: new Date().toISOString(),
+    };
+    setMsgs((p) => [...p, optimisticMsg]);
+    setInput(""); setReplyTo(null);
+    setIsAtBottom(true); // auto-scroll for own messages
+    
     setSending(true);
     try {
-      const b: Record<string, string> = { message: input.trim() };
-      if (replyTo) { b.replyToMsgId = replyTo.id; if (replyTo.whatsapp_msg_id) b.replyToWhatsappId = replyTo.whatsapp_msg_id; }
+      const b: Record<string, string> = { message: text };
+      if (reply) { b.replyToMsgId = reply.id; if (reply.whatsapp_msg_id) b.replyToWhatsappId = reply.whatsapp_msg_id; }
       const r = await fetch(`/api/conversations/${selId}/send`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b) });
-      if (!r.ok) { const d = await r.json(); alert("Error:\n" + JSON.stringify(d, null, 2)); return; }
-      setInput(""); setReplyTo(null); fetchMsgs(selId);
-    } catch (e) { alert("Network Error: " + String(e)); }
+      if (!r.ok) {
+        // Remove optimistic message on error
+        setMsgs((p) => p.filter((m) => m.id !== tempId));
+        const d = await r.json(); alert("Error:\n" + JSON.stringify(d, null, 2));
+        setInput(text); // restore input
+        return;
+      }
+      const real = await r.json();
+      // Replace temp with real message
+      setMsgs((p) => p.map((m) => m.id === tempId ? { ...real } : m));
+    } catch (e) {
+      setMsgs((p) => p.filter((m) => m.id !== tempId));
+      setInput(text);
+      alert("Network Error: " + String(e));
+    }
     finally { setSending(false); }
   }
 
@@ -208,15 +238,10 @@ export default function Dashboard() {
     if (!mediaRecorderRef.current || !selId) return;
     const mr = mediaRecorderRef.current;
     
-    // Stop and wait for final data
     await new Promise<void>((resolve) => {
       const origStop = mr.onstop;
-      mr.onstop = (e) => {
-        if (origStop && typeof origStop === "function") origStop.call(mr, e);
-        resolve();
-      };
-      if (mr.state !== "inactive") mr.stop();
-      else resolve();
+      mr.onstop = (e) => { if (origStop && typeof origStop === "function") origStop.call(mr, e); resolve(); };
+      if (mr.state !== "inactive") mr.stop(); else resolve();
     });
 
     if (timerRef.current) clearInterval(timerRef.current);
@@ -226,6 +251,10 @@ export default function Dashboard() {
     const blob = new Blob(chunksRef.current, { type: "audio/webm" });
     if (blob.size === 0) return;
 
+    // Optimistic: show sending indicator
+    const tempId = `temp_voice_${Date.now()}`;
+    addOptimisticMsg(tempId, "🎵 Sending voice...", "audio");
+
     setSending(true);
     try {
       const file = new File([blob], `voice_${Date.now()}.webm`, { type: "audio/webm" });
@@ -233,10 +262,26 @@ export default function Dashboard() {
       fd.append("file", file);
       fd.append("caption", "");
       const res = await fetch(`/api/conversations/${selId}/send-media`, { method: "POST", body: fd });
-      if (!res.ok) { const d = await res.json(); alert("Error: " + JSON.stringify(d)); }
-      else { fetchMsgs(selId); scrollToBottom(); }
-    } catch (err) { alert("Error: " + String(err)); }
+      if (!res.ok) { setMsgs((p) => p.filter((m) => m.id !== tempId)); const d = await res.json(); alert("Error: " + JSON.stringify(d)); }
+      else { const real = await res.json(); setMsgs((p) => p.map((m) => m.id === tempId ? { ...real } : m)); }
+    } catch (err) { setMsgs((p) => p.filter((m) => m.id !== tempId)); alert("Error: " + String(err)); }
     finally { setSending(false); chunksRef.current = []; }
+  }
+
+  // Helper for optimistic messages
+  function addOptimisticMsg(tempId: string, content: string, type: string = "text") {
+    if (!selId) return;
+    const msg: Message = {
+      id: tempId, conversation_id: selId, role: "assistant", content,
+      message_type: type as Message["message_type"], media_url: null, media_mime_type: null, media_filename: null,
+      media_caption: null, media_sha256: null, reply_to_id: null,
+      reaction: null, reaction_msg_id: null, latitude: null, longitude: null,
+      location_name: null, location_address: null, whatsapp_msg_id: null,
+      is_deleted: false, is_starred: false, status: "sent",
+      created_at: new Date().toISOString(),
+    };
+    setMsgs((p) => [...p, msg]);
+    setIsAtBottom(true);
   }
 
   function fmtRecTime(s: number) { const m = Math.floor(s / 60); const ss = s % 60; return `${m}:${ss.toString().padStart(2, "0")}`; }
@@ -639,15 +684,18 @@ export default function Dashboard() {
                   <input id="file-input" type="file" className="hidden" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar" onChange={async (e) => {
                     const file = e.target.files?.[0];
                     if (!file || !selId) return;
+                    const icon = file.type.startsWith("image/") ? "📷" : file.type.startsWith("video/") ? "🎥" : "📄";
+                    const tempId = `temp_file_${Date.now()}`;
+                    addOptimisticMsg(tempId, `${icon} Sending ${file.name}...`, file.type.startsWith("image/") ? "image" : "document");
                     setSending(true);
                     try {
                       const fd = new FormData();
                       fd.append("file", file);
                       fd.append("caption", "");
                       const res = await fetch(`/api/conversations/${selId}/send-media`, { method: "POST", body: fd });
-                      if (!res.ok) { const d = await res.json(); alert("Error: " + JSON.stringify(d)); }
-                      else { fetchMsgs(selId); scrollToBottom(); }
-                    } catch (err) { alert("Error: " + String(err)); }
+                      if (!res.ok) { setMsgs((p) => p.filter((m) => m.id !== tempId)); const d = await res.json(); alert("Error: " + JSON.stringify(d)); }
+                      else { const real = await res.json(); setMsgs((p) => p.map((m) => m.id === tempId ? { ...real } : m)); }
+                    } catch (err) { setMsgs((p) => p.filter((m) => m.id !== tempId)); alert("Error: " + String(err)); }
                     finally { setSending(false); e.target.value = ""; }
                   }}/>
                   <div className="flex-1 bg-[#2a3942] rounded-lg px-4 py-2.5"><input ref={inputRef} type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) handleSend(); }} placeholder="Type a message" className="w-full bg-transparent text-[14px] text-white placeholder:text-white/30 focus:outline-none"/></div>

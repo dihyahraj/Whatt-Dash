@@ -40,10 +40,13 @@ export async function POST(
     const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
 
     // Determine WhatsApp message type
+    // WhatsApp audio only supports: aac, mp4, mpeg, amr, ogg (NOT webm)
+    const waAudioFormats = ["audio/aac", "audio/mp4", "audio/mpeg", "audio/amr", "audio/ogg"];
     let waType = "document";
     if (file.type.startsWith("image/")) waType = "image";
     else if (file.type.startsWith("video/")) waType = "video";
-    else if (file.type.startsWith("audio/")) waType = "audio";
+    else if (waAudioFormats.some((f) => file.type.startsWith(f))) waType = "audio";
+    // audio/webm stays as "document" — WhatsApp doesn't support webm
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const waPayload: any = {
