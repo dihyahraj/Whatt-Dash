@@ -11,8 +11,9 @@ export default function LoginPage() {
   const [busy, setBusy] = useState(false);
   const [showPw, setShowPw] = useState(false);
 
-  // If already logged in, redirect
-  if (!loading && user) { window.location.href = "/"; return null; }
+  // If already logged in AND has session tokens, redirect
+  const hasSession = typeof window !== "undefined" && Object.keys(localStorage).some((k) => k.startsWith("sb-"));
+  if (!loading && user && hasSession) { window.location.href = "/"; return null; }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();

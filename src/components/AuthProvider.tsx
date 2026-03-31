@@ -42,6 +42,7 @@ async function serverCheckAllowed(email: string): Promise<{ allowed: boolean; di
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   const supabase = useMemo(() => {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -85,6 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const timeout = setTimeout(() => { if (!cancelled) setLoading(false); }, 5000);
 
     const { data: { subscription } } = sb.auth.onAuthStateChange(async (event, session) => {
+      if (loggingOut) return; // Ignore during logout
       if (event === "SIGNED_OUT") { setUser(null); return; }
       if (session?.user) {
         const resolved = await resolveUser(session.user);
@@ -115,22 +117,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   function signOut() {
     if (!confirm("Logout karna hai?")) return;
+    setLoggingOut(true);
     setUser(null);
-    // Clear Supabase session completely
-    if (supabase) {
-      supabase.auth.signOut().then(() => {
-        // Also clear any localStorage tokens manually
-        Object.keys(localStorage).forEach((k) => {
-          if (k.startsWith("sb-")) localStorage.removeItem(k);
-        });
-        window.location.replace("/login");
-      });
-    } else {
-      Object.keys(localStorage).forEach((k) => {
-        if (k.startsWith("sb-")) localStorage.removeItem(k);
-      });
-      window.location.replace("/login");
-    }
+    // Clear all Supabase tokens from localStorage
+    Object.keys(localStorage).forEach((k) => {
+      if (k.startsWith("sb-")) localStorage.removeItem(k);
+    });
+    if (supabase) supabase.auth.signOut().catch(() => {});
+    // Hard redirect after small delay to ensure cleanup
+    setTimeout(() => { window.location.replace("/login"); }, 100);
   }
 
   return (
