@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "WhatsApp AI Agent",
-  description: "WhatsApp AI Agent Dashboard",
+  title: "Whatt Dash — WhatsApp Business Dashboard",
+  description: "Full-featured WhatsApp Business Dashboard with real-time messaging, media support, and conversation management.",
 };
 
 export default function RootLayout({

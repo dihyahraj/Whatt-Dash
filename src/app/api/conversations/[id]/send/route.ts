@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { supabase } from "@/lib/supabase";
-import { sendWhatsAppMessage } from "@/lib/whatsapp";
+import { sendWhatsAppMessage, sendWhatsAppReply } from "@/lib/whatsapp";
 
 export async function POST(
   request: NextRequest,
@@ -8,13 +8,12 @@ export async function POST(
 ) {
   const { id } = await params;
   const body = await request.json();
-  const { message } = body;
+  const { message, replyToMsgId, replyToWhatsappId } = body;
 
   if (!message?.trim()) {
     return Response.json({ error: "Message is required" }, { status: 400 });
   }
 
-  // Get conversation to find phone number
   const { data: conversation, error: convoError } = await supabase
     .from("conversations")
     .select("phone")
@@ -25,17 +24,24 @@ export async function POST(
     return Response.json({ error: "Conversation not found" }, { status: 404 });
   }
 
-  // Send via WhatsApp
-  const waResponse = await sendWhatsAppMessage(conversation.phone, message);
+  // Send via WhatsApp (with or without reply context)
+  let waResponse;
+  if (replyToWhatsappId) {
+    waResponse = await sendWhatsAppReply(conversation.phone, message, replyToWhatsappId);
+  } else {
+    waResponse = await sendWhatsAppMessage(conversation.phone, message);
+  }
 
-  // Agar WhatsApp ki taraf se error aata hai toh API wahi ruk jaye:
   if (waResponse.error) {
     console.error("WhatsApp API Error:", waResponse.error);
     return Response.json(
-      { error: "WhatsApp API failed", details: waResponse.error }, 
+      { error: "WhatsApp API failed", details: waResponse.error },
       { status: 400 }
     );
   }
+
+  // Get the WA message ID from response
+  const waMsgId = waResponse.messages?.[0]?.id || null;
 
   // Store in DB
   const { data: msg, error: msgError } = await supabase
@@ -44,6 +50,10 @@ export async function POST(
       conversation_id: id,
       role: "assistant",
       content: message,
+      message_type: "text",
+      reply_to_id: replyToMsgId || null,
+      whatsapp_msg_id: waMsgId,
+      status: "sent",
     })
     .select()
     .single();
@@ -52,7 +62,6 @@ export async function POST(
     return Response.json({ error: msgError.message }, { status: 500 });
   }
 
-  // Update conversation timestamp
   await supabase
     .from("conversations")
     .update({ updated_at: new Date().toISOString() })
