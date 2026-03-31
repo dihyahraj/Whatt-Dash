@@ -312,8 +312,10 @@ export default function Dashboard() {
           </div>
         )}
         <MI i="📦" l="Archive" o={() => { act(`/api/conversations/${convo.id}/archive`, { archived: true }); onClose(); }}/>
-        <div className="h-px bg-white/[0.06] my-1"/>
-        <MI i="🗑️" l="Delete chat" o={() => { delChat(convo.id); onClose(); }} d/>
+        {user?.role === "admin" && <>
+          <div className="h-px bg-white/[0.06] my-1"/>
+          <MI i="🗑️" l="Delete chat" o={() => { delChat(convo.id); onClose(); }} d/>
+        </>}
       </div>
     );
   }
@@ -347,7 +349,7 @@ export default function Dashboard() {
               <div><h1 className="text-[14px] font-bold text-white">Whatt Dash</h1><p className="text-[11px] text-white/35">{user.display_name} • {convos.length} chat{convos.length !== 1 ? "s" : ""}</p></div>
             </div>
             <div className="flex items-center gap-0.5">
-              {user.role === "admin" && (
+              {user?.role === "admin" && (
                 <button onClick={() => router.push("/admin")} className="w-8 h-8 rounded-full hover:bg-white/[0.06] flex items-center justify-center text-white/40 hover:text-white/70" title="Manage Users">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
                 </button>
@@ -430,7 +432,7 @@ export default function Dashboard() {
                   </div>
                   <div className="flex gap-1 ml-2 flex-shrink-0">
                     <button onClick={() => unarchive(ac.id)} className="px-2 py-1 text-[10px] bg-emerald-600/20 text-emerald-400 rounded hover:bg-emerald-600/30 font-medium">Unarchive</button>
-                    <button onClick={() => delChat(ac.id)} className="px-2 py-1 text-[10px] bg-red-600/20 text-red-400 rounded hover:bg-red-600/30 font-medium">Delete</button>
+                    {user?.role === "admin" && <button onClick={() => delChat(ac.id)} className="px-2 py-1 text-[10px] bg-red-600/20 text-red-400 rounded hover:bg-red-600/30 font-medium">Delete</button>}
                   </div>
                 </div>
               ))}
@@ -438,7 +440,7 @@ export default function Dashboard() {
           )}
 
           {/* ═══ LABELS MANAGEMENT ═══ */}
-          {user.role === "admin" && (
+          {user?.role === "admin" && (
             <div className="border-t border-white/[0.06]">
               <div className="px-4 py-2.5">
                 <p className="text-[11px] text-white/30 font-medium mb-2">MANAGE LABELS</p>
@@ -501,8 +503,10 @@ export default function Dashboard() {
                         </div>
                       )}
                       <MI i="📦" l="Archive" o={() => { act(`/api/conversations/${sel.id}/archive`, { archived: true }); if (selId === sel.id) { setSelId(null); setMsgs([]); } }}/>
-                      <div className="h-px bg-white/[0.06] my-1"/>
-                      <MI i="🗑️" l="Delete chat" o={() => delChat(sel.id)} d/>
+                      {user?.role === "admin" && <>
+                        <div className="h-px bg-white/[0.06] my-1"/>
+                        <MI i="🗑️" l="Delete chat" o={() => delChat(sel.id)} d/>
+                      </>}
                     </div>
                   )}
                 </div>
@@ -556,8 +560,10 @@ export default function Dashboard() {
                             <MI i="😀" l="React" o={() => { setReactPickerId(msg.id); setMsgMenuId(null); }}/>
                             <MI i={msg.is_starred ? "⭐" : "☆"} l={msg.is_starred ? "Unstar" : "Star"} o={() => starMsg(msg.id, !msg.is_starred)}/>
                             <MI i="📋" l="Copy" o={() => { navigator.clipboard.writeText(msg.content); setMsgMenuId(null); }}/>
-                            <div className="h-px bg-white/[0.06] my-1"/>
-                            <MI i="🗑️" l="Delete" o={() => delMsg(msg.id)} d/>
+                            {user?.role === "admin" && <>
+                              <div className="h-px bg-white/[0.06] my-1"/>
+                              <MI i="🗑️" l="Delete" o={() => delMsg(msg.id)} d/>
+                            </>}
                           </div>
                         )}
 
