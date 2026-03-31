@@ -71,6 +71,7 @@ export default function Dashboard() {
   // Fetch
   const fetchConvos = useCallback(async () => { try { const r = await fetch("/api/conversations"); const d = await r.json(); if (Array.isArray(d)) setConvos(d); } catch {} }, []);
   const sendingRef = useRef(false);
+  const lastSentIdsRef = useRef<Set<string>>(new Set());
 
   const fetchMsgs = useCallback(async (id: string) => {
     // Don't overwrite while sending (optimistic msg would duplicate)
@@ -155,16 +156,17 @@ export default function Dashboard() {
         const m = p.new as Message;
         if (m.conversation_id === selId) {
           setMsgs((prev) => {
-            // If already exists, skip
+            // Skip if already exists or recently sent by us
             if (prev.some((x) => x.id === m.id)) return prev;
-            // If there's a temp msg with same content, replace it (optimistic → real)
+            if (lastSentIdsRef.current.has(m.id)) return prev;
+            // If there's a temp msg with same content, replace it
             const tempIdx = prev.findIndex((x) => x.id.startsWith("temp_") && x.content === m.content && x.role === m.role);
             if (tempIdx >= 0) {
               const updated = [...prev];
               updated[tempIdx] = m;
               return updated;
             }
-            // Skip adding our own sent messages while still sending (temp already showing)
+            // Skip own msgs while sending
             if (m.role === "assistant" && sendingRef.current) return prev;
             return [...prev, m];
           });
@@ -221,14 +223,21 @@ export default function Dashboard() {
         return;
       }
       const real = await r.json();
-      // Replace temp with real message
+      // Replace temp with real message, track ID to prevent duplicates
+      lastSentIdsRef.current.add(real.id);
       setMsgs((p) => p.map((m) => m.id === tempId ? { ...real } : m));
+      // Keep sendingRef true for 3 more seconds to block polling/realtime duplicates
+      setTimeout(() => { 
+        setSending(false);
+        // Clean up after 10s
+        setTimeout(() => { lastSentIdsRef.current.delete(real.id); }, 10000);
+      }, 3000);
     } catch (e) {
       setMsgs((p) => p.filter((m) => m.id !== tempId));
       setInput(text);
       alert("Network Error: " + String(e));
+      setSending(false);
     }
-    finally { setSending(false); }
   }
 
   // Chat actions
@@ -317,10 +326,10 @@ export default function Dashboard() {
       fd.append("file", file);
       fd.append("caption", "");
       const res = await fetch(`/api/conversations/${selId}/send-media`, { method: "POST", body: fd });
-      if (!res.ok) { setMsgs((p) => p.filter((m) => m.id !== tempId)); const d = await res.json(); alert("Error: " + JSON.stringify(d)); }
-      else { const real = await res.json(); setMsgs((p) => p.map((m) => m.id === tempId ? { ...real } : m)); }
-    } catch (err) { setMsgs((p) => p.filter((m) => m.id !== tempId)); alert("Error: " + String(err)); }
-    finally { setSending(false); chunksRef.current = []; }
+      if (!res.ok) { setMsgs((p) => p.filter((m) => m.id !== tempId)); const d = await res.json(); alert("Error: " + JSON.stringify(d)); setSending(false); }
+      else { const real = await res.json(); lastSentIdsRef.current.add(real.id); setMsgs((p) => p.map((m) => m.id === tempId ? { ...real } : m)); setTimeout(() => { setSending(false); setTimeout(() => lastSentIdsRef.current.delete(real.id), 10000); }, 3000); }
+    } catch (err) { setMsgs((p) => p.filter((m) => m.id !== tempId)); alert("Error: " + String(err)); setSending(false); }
+    finally { chunksRef.current = []; }
   }
 
   // Helper for optimistic messages
@@ -752,10 +761,10 @@ export default function Dashboard() {
                       fd.append("file", file);
                       fd.append("caption", "");
                       const res = await fetch(`/api/conversations/${selId}/send-media`, { method: "POST", body: fd });
-                      if (!res.ok) { setMsgs((p) => p.filter((m) => m.id !== tempId)); const d = await res.json(); alert("Error: " + JSON.stringify(d)); }
-                      else { const real = await res.json(); setMsgs((p) => p.map((m) => m.id === tempId ? { ...real } : m)); }
-                    } catch (err) { setMsgs((p) => p.filter((m) => m.id !== tempId)); alert("Error: " + String(err)); }
-                    finally { setSending(false); e.target.value = ""; }
+                      if (!res.ok) { setMsgs((p) => p.filter((m) => m.id !== tempId)); const d = await res.json(); alert("Error: " + JSON.stringify(d)); setSending(false); }
+                      else { const real = await res.json(); lastSentIdsRef.current.add(real.id); setMsgs((p) => p.map((m) => m.id === tempId ? { ...real } : m)); setTimeout(() => { setSending(false); setTimeout(() => lastSentIdsRef.current.delete(real.id), 10000); }, 3000); }
+                    } catch (err) { setMsgs((p) => p.filter((m) => m.id !== tempId)); alert("Error: " + String(err)); setSending(false); }
+                    finally { e.target.value = ""; }
                   }}/>
                   <div className="flex-1 bg-[#2a3942] rounded-lg px-4 py-2.5"><input ref={inputRef} type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) handleSend(); }} placeholder="Type a message" className="w-full bg-transparent text-[14px] text-white placeholder:text-white/30 focus:outline-none"/></div>
                   {input.trim() ? (
