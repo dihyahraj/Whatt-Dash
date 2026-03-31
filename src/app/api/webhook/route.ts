@@ -1,12 +1,12 @@
 import { NextRequest } from "next/server";
 import { supabase } from "@/lib/supabase";
+import { downloadAndStoreMedia } from "@/lib/media-storage";
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
   const mode = searchParams.get("hub.mode");
   const token = searchParams.get("hub.verify_token");
   const challenge = searchParams.get("hub.challenge");
-
   if (mode === "subscribe" && token === process.env.WHATSAPP_VERIFY_TOKEN) {
     return new Response(challenge, { status: 200 });
   }
@@ -15,32 +15,18 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   const body = await request.json();
+  if (body.object !== "whatsapp_business_account") return Response.json({ status: "ignored" });
 
-  if (body.object !== "whatsapp_business_account") {
-    return Response.json({ status: "ignored" });
-  }
+  const value = body.entry?.[0]?.changes?.[0]?.value;
 
-  const entry = body.entry?.[0];
-  const changes = entry?.changes?.[0];
-  const value = changes?.value;
-
-  // Handle status updates (sent/delivered/read)
+  // Status updates
   if (value?.statuses?.[0]) {
-    const statusUpdate = value.statuses[0];
-    try {
-      await supabase
-        .from("messages")
-        .update({ status: statusUpdate.status })
-        .eq("whatsapp_msg_id", statusUpdate.id);
-    } catch (e) {
-      console.error("Status update error:", e);
-    }
+    const s = value.statuses[0];
+    await supabase.from("messages").update({ status: s.status }).eq("whatsapp_msg_id", s.id);
     return Response.json({ status: "status_updated" });
   }
 
-  if (!value?.messages?.[0]) {
-    return Response.json({ status: "no_message" });
-  }
+  if (!value?.messages?.[0]) return Response.json({ status: "no_message" });
 
   const message = value.messages[0];
   const contact = value.contacts?.[0];
@@ -51,35 +37,22 @@ export async function POST(request: NextRequest) {
 
   try {
     // Find or create conversation
-    let { data: conversation } = await supabase
-      .from("conversations")
-      .select("*")
-      .eq("phone", phone)
-      .single();
+    let { data: conversation } = await supabase.from("conversations").select("*").eq("phone", phone).single();
 
     if (!conversation) {
-      const { data: newConvo } = await supabase
-        .from("conversations")
-        .insert({ phone, name, unread_count: 1 })
-        .select()
-        .single();
+      const { data: newConvo } = await supabase.from("conversations").insert({ phone, name, unread_count: 1 }).select().single();
       conversation = newConvo;
     } else {
-      await supabase
-        .from("conversations")
-        .update({
-          ...(name && name !== conversation.name ? { name } : {}),
-          unread_count: (conversation.unread_count || 0) + 1,
-        })
-        .eq("id", conversation.id);
+      await supabase.from("conversations").update({
+        ...(name && name !== conversation.name ? { name } : {}),
+        unread_count: (conversation.unread_count || 0) + 1,
+      }).eq("id", conversation.id);
     }
 
-    if (!conversation) {
-      return Response.json({ error: "Failed to create conversation" }, { status: 500 });
-    }
+    if (!conversation) return Response.json({ error: "Failed to create conversation" }, { status: 500 });
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const msgRecord: Record<string, any> = {
+    const rec: Record<string, any> = {
       conversation_id: conversation.id,
       role: "user",
       content: "",
@@ -87,19 +60,15 @@ export async function POST(request: NextRequest) {
       whatsapp_msg_id: whatsappMsgId,
     };
 
-    // Handle reply context
+    // Reply context
     if (message.context?.id) {
-      const { data: replyMsg } = await supabase
-        .from("messages")
-        .select("id")
-        .eq("whatsapp_msg_id", message.context.id)
-        .single();
-      if (replyMsg) msgRecord.reply_to_id = replyMsg.id;
+      const { data: rm } = await supabase.from("messages").select("id").eq("whatsapp_msg_id", message.context.id).single();
+      if (rm) rec.reply_to_id = rm.id;
     }
 
     switch (msgType) {
       case "text":
-        msgRecord.content = message.text?.body || "";
+        rec.content = message.text?.body || "";
         break;
 
       case "image":
@@ -108,12 +77,13 @@ export async function POST(request: NextRequest) {
       case "sticker": {
         const media = message[msgType as "image" | "video" | "audio" | "sticker"];
         if (media) {
-          // Store proxy URL instead of Facebook CDN URL (browser can't access CDN directly)
-          msgRecord.media_url = `/api/media/${media.id}`;
-          msgRecord.media_mime_type = media.mime_type;
-          msgRecord.media_sha256 = media.sha256 || null;
-          msgRecord.media_caption = media.caption || null;
-          msgRecord.content = media.caption || `[${msgType}]`;
+          // Download immediately and store in Supabase Storage
+          const publicUrl = await downloadAndStoreMedia(media.id, media.mime_type);
+          rec.media_url = publicUrl; // permanent public URL (or null if failed)
+          rec.media_mime_type = media.mime_type;
+          rec.media_sha256 = media.sha256 || null;
+          rec.media_caption = media.caption || null;
+          rec.content = media.caption || `[${msgType}]`;
         }
         break;
       }
@@ -121,12 +91,13 @@ export async function POST(request: NextRequest) {
       case "document": {
         const doc = message.document;
         if (doc) {
-          msgRecord.media_url = `/api/media/${doc.id}`;
-          msgRecord.media_mime_type = doc.mime_type;
-          msgRecord.media_filename = doc.filename || null;
-          msgRecord.media_sha256 = doc.sha256 || null;
-          msgRecord.media_caption = doc.caption || null;
-          msgRecord.content = doc.caption || doc.filename || "[document]";
+          const publicUrl = await downloadAndStoreMedia(doc.id, doc.mime_type, doc.filename);
+          rec.media_url = publicUrl;
+          rec.media_mime_type = doc.mime_type;
+          rec.media_filename = doc.filename || null;
+          rec.media_sha256 = doc.sha256 || null;
+          rec.media_caption = doc.caption || null;
+          rec.content = doc.caption || doc.filename || "[document]";
         }
         break;
       }
@@ -134,11 +105,11 @@ export async function POST(request: NextRequest) {
       case "location": {
         const loc = message.location;
         if (loc) {
-          msgRecord.latitude = loc.latitude;
-          msgRecord.longitude = loc.longitude;
-          msgRecord.location_name = loc.name || null;
-          msgRecord.location_address = loc.address || null;
-          msgRecord.content = loc.name || loc.address || `📍 ${loc.latitude}, ${loc.longitude}`;
+          rec.latitude = loc.latitude;
+          rec.longitude = loc.longitude;
+          rec.location_name = loc.name || null;
+          rec.location_address = loc.address || null;
+          rec.content = loc.name || loc.address || `📍 ${loc.latitude}, ${loc.longitude}`;
         }
         break;
       }
@@ -147,8 +118,8 @@ export async function POST(request: NextRequest) {
         const contacts = message.contacts;
         if (contacts?.length > 0) {
           const names = contacts.map((c: { name: { formatted_name: string } }) => c.name.formatted_name).join(", ");
-          msgRecord.content = `📇 Contact: ${names}`;
-          msgRecord.media_caption = JSON.stringify(contacts);
+          rec.content = `📇 Contact: ${names}`;
+          rec.media_caption = JSON.stringify(contacts);
         }
         break;
       }
@@ -156,52 +127,39 @@ export async function POST(request: NextRequest) {
       case "reaction": {
         const reaction = message.reaction;
         if (reaction) {
-          const { data: reactedMsg } = await supabase
-            .from("messages")
-            .select("id")
-            .eq("whatsapp_msg_id", reaction.message_id)
-            .single();
-          if (reactedMsg) {
-            await supabase.from("messages").update({ reaction: reaction.emoji }).eq("id", reactedMsg.id);
-          }
+          const { data: rm } = await supabase.from("messages").select("id").eq("whatsapp_msg_id", reaction.message_id).single();
+          if (rm) await supabase.from("messages").update({ reaction: reaction.emoji }).eq("id", rm.id);
           await supabase.from("conversations").update({ updated_at: new Date().toISOString() }).eq("id", conversation.id);
           return Response.json({ status: "reaction_stored" });
         }
         break;
       }
 
-      // Basic poll support
       case "interactive": {
-        const interactive = message.interactive;
-        if (interactive) {
-          if (interactive.type === "button_reply") {
-            msgRecord.content = `📊 Poll reply: ${interactive.button_reply?.title || ""}`;
-            msgRecord.message_type = "text";
-          } else if (interactive.type === "list_reply") {
-            msgRecord.content = `📋 Selected: ${interactive.list_reply?.title || ""}`;
-            msgRecord.message_type = "text";
-          } else {
-            msgRecord.content = `[interactive: ${interactive.type}]`;
-            msgRecord.message_type = "text";
-          }
+        const inter = message.interactive;
+        if (inter?.type === "button_reply") {
+          rec.content = `📊 ${inter.button_reply?.title || "Button reply"}`;
+        } else if (inter?.type === "list_reply") {
+          rec.content = `📋 ${inter.list_reply?.title || "List reply"}`;
+        } else {
+          rec.content = `[interactive: ${inter?.type || "unknown"}]`;
         }
+        rec.message_type = "text";
         break;
       }
 
-      // Poll votes
-      case "button": {
-        msgRecord.content = `📊 ${message.button?.text || "[button response]"}`;
-        msgRecord.message_type = "text";
+      case "button":
+        rec.content = `📊 ${message.button?.text || "Button response"}`;
+        rec.message_type = "text";
         break;
-      }
 
       default:
-        msgRecord.content = `[${msgType} message]`;
-        msgRecord.message_type = "text";
+        rec.content = `[${msgType} message]`;
+        rec.message_type = "text";
         break;
     }
 
-    const { error: insertError } = await supabase.from("messages").insert(msgRecord);
+    const { error: insertError } = await supabase.from("messages").insert(rec);
     if (insertError?.code === "23505") return Response.json({ status: "duplicate" });
     if (insertError) {
       console.error("Insert error:", insertError);
