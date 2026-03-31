@@ -58,6 +58,13 @@ export default function Dashboard() {
   const chatBoxRef = useRef<HTMLDivElement>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [hasNewMsg, setHasNewMsg] = useState(false);
+  
+  // Voice recording
+  const [isRecording, setIsRecording] = useState(false);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const chunksRef = useRef<Blob[]>([]);
+  const timerRef = useRef<NodeJS.Timeout | null>(null);
   const sel = convos.find((c) => c.id === selId);
 
   // Fetch
@@ -168,9 +175,75 @@ export default function Dashboard() {
     fetchConvos(); setShowLabelMenu(null);
   }
 
+  // Voice recording
+  async function startRecording() {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream, { mimeType: MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "audio/webm" });
+      chunksRef.current = [];
+      mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
+      mr.onstop = () => { stream.getTracks().forEach((t) => t.stop()); };
+      mr.start();
+      mediaRecorderRef.current = mr;
+      setIsRecording(true);
+      setRecordingTime(0);
+      timerRef.current = setInterval(() => setRecordingTime((t) => t + 1), 1000);
+    } catch {
+      alert("Microphone access denied. Browser settings mein mic allow karo.");
+    }
+  }
+
+  function cancelRecording() {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      mediaRecorderRef.current.onstop = () => { mediaRecorderRef.current?.stream.getTracks().forEach((t) => t.stop()); };
+      mediaRecorderRef.current.stop();
+    }
+    if (timerRef.current) clearInterval(timerRef.current);
+    setIsRecording(false);
+    setRecordingTime(0);
+    chunksRef.current = [];
+  }
+
+  async function sendRecording() {
+    if (!mediaRecorderRef.current || !selId) return;
+    const mr = mediaRecorderRef.current;
+    
+    // Stop and wait for final data
+    await new Promise<void>((resolve) => {
+      const origStop = mr.onstop;
+      mr.onstop = (e) => {
+        if (origStop && typeof origStop === "function") origStop.call(mr, e);
+        resolve();
+      };
+      if (mr.state !== "inactive") mr.stop();
+      else resolve();
+    });
+
+    if (timerRef.current) clearInterval(timerRef.current);
+    setIsRecording(false);
+    setRecordingTime(0);
+
+    const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+    if (blob.size === 0) return;
+
+    setSending(true);
+    try {
+      const file = new File([blob], `voice_${Date.now()}.webm`, { type: "audio/webm" });
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("caption", "");
+      const res = await fetch(`/api/conversations/${selId}/send-media`, { method: "POST", body: fd });
+      if (!res.ok) { const d = await res.json(); alert("Error: " + JSON.stringify(d)); }
+      else { fetchMsgs(selId); scrollToBottom(); }
+    } catch (err) { alert("Error: " + String(err)); }
+    finally { setSending(false); chunksRef.current = []; }
+  }
+
+  function fmtRecTime(s: number) { const m = Math.floor(s / 60); const ss = s % 60; return `${m}:${ss.toString().padStart(2, "0")}`; }
+
   // Escape key
   useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === "Escape") { setReplyTo(null); setChatMenuId(null); setMsgMenuId(null); setReactPickerId(null); setShowEmoji(false); setHeaderMenu(false); setImgPreview(null); setShowChatSearch(false); } };
+    const h = (e: KeyboardEvent) => { if (e.key === "Escape") { setReplyTo(null); setChatMenuId(null); setMsgMenuId(null); setReactPickerId(null); setShowEmoji(false); setHeaderMenu(false); setImgPreview(null); setShowChatSearch(false); if (isRecording) cancelRecording(); } };
     document.addEventListener("keydown", h); return () => document.removeEventListener("keydown", h);
   }, []);
 
@@ -535,29 +608,55 @@ export default function Dashboard() {
 
             {/* Input */}
             <div className="px-4 sm:px-12 py-2 flex items-center gap-2" style={{ background: "#202c33" }}>
-              <button onClick={(e) => { e.stopPropagation(); setShowEmoji(!showEmoji); }} className="w-10 h-10 rounded-full hover:bg-white/[0.08] flex items-center justify-center text-white/40 text-[22px] flex-shrink-0">😀</button>
-              <button onClick={() => document.getElementById("file-input")?.click()} className="w-10 h-10 rounded-full hover:bg-white/[0.08] flex items-center justify-center text-white/40 flex-shrink-0" title="Attach file">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-              </button>
-              <input id="file-input" type="file" className="hidden" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar" onChange={async (e) => {
-                const file = e.target.files?.[0];
-                if (!file || !selId) return;
-                setSending(true);
-                try {
-                  const fd = new FormData();
-                  fd.append("file", file);
-                  fd.append("caption", "");
-                  const res = await fetch(`/api/conversations/${selId}/send-media`, { method: "POST", body: fd });
-                  if (!res.ok) { const d = await res.json(); alert("Error: " + JSON.stringify(d)); }
-                  else { fetchMsgs(selId); scrollToBottom(); }
-                } catch (err) { alert("Error: " + String(err)); }
-                finally { setSending(false); e.target.value = ""; }
-              }}/>
-              <div className="flex-1 bg-[#2a3942] rounded-lg px-4 py-2.5"><input ref={inputRef} type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) handleSend(); }} placeholder="Type a message" className="w-full bg-transparent text-[14px] text-white placeholder:text-white/30 focus:outline-none"/></div>
-              <button onClick={handleSend} disabled={sending || !input.trim()} className="w-10 h-10 rounded-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-20 transition flex items-center justify-center flex-shrink-0">
-                {sending ? <svg className="animate-spin" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-                : <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>}
-              </button>
+              {isRecording ? (
+                /* ── Recording UI ── */
+                <>
+                  <button onClick={cancelRecording} className="w-10 h-10 rounded-full hover:bg-red-500/20 flex items-center justify-center text-red-400 flex-shrink-0" title="Cancel">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                  </button>
+                  <div className="flex-1 bg-[#2a3942] rounded-lg px-4 py-2.5 flex items-center gap-3">
+                    <div className="w-3 h-3 rounded-full bg-red-500 animate-pulse flex-shrink-0"/>
+                    <span className="text-[14px] text-red-400 font-mono">{fmtRecTime(recordingTime)}</span>
+                    <span className="text-[13px] text-white/30">Recording...</span>
+                  </div>
+                  <button onClick={sendRecording} className="w-10 h-10 rounded-full bg-emerald-600 hover:bg-emerald-500 transition flex items-center justify-center flex-shrink-0" title="Send voice">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+                  </button>
+                </>
+              ) : (
+                /* ── Normal Input UI ── */
+                <>
+                  <button onClick={(e) => { e.stopPropagation(); setShowEmoji(!showEmoji); }} className="w-10 h-10 rounded-full hover:bg-white/[0.08] flex items-center justify-center text-white/40 text-[22px] flex-shrink-0">😀</button>
+                  <button onClick={() => document.getElementById("file-input")?.click()} className="w-10 h-10 rounded-full hover:bg-white/[0.08] flex items-center justify-center text-white/40 flex-shrink-0" title="Attach file">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                  </button>
+                  <input id="file-input" type="file" className="hidden" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar" onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (!file || !selId) return;
+                    setSending(true);
+                    try {
+                      const fd = new FormData();
+                      fd.append("file", file);
+                      fd.append("caption", "");
+                      const res = await fetch(`/api/conversations/${selId}/send-media`, { method: "POST", body: fd });
+                      if (!res.ok) { const d = await res.json(); alert("Error: " + JSON.stringify(d)); }
+                      else { fetchMsgs(selId); scrollToBottom(); }
+                    } catch (err) { alert("Error: " + String(err)); }
+                    finally { setSending(false); e.target.value = ""; }
+                  }}/>
+                  <div className="flex-1 bg-[#2a3942] rounded-lg px-4 py-2.5"><input ref={inputRef} type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) handleSend(); }} placeholder="Type a message" className="w-full bg-transparent text-[14px] text-white placeholder:text-white/30 focus:outline-none"/></div>
+                  {input.trim() ? (
+                    <button onClick={handleSend} disabled={sending} className="w-10 h-10 rounded-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-20 transition flex items-center justify-center flex-shrink-0">
+                      {sending ? <svg className="animate-spin" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                      : <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>}
+                    </button>
+                  ) : (
+                    <button onClick={startRecording} disabled={sending} className="w-10 h-10 rounded-full hover:bg-white/[0.08] flex items-center justify-center text-white/40 hover:text-emerald-400 transition flex-shrink-0 disabled:opacity-20" title="Voice message">
+                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+                    </button>
+                  )}
+                </>
+              )}
             </div>
           </>
         )}
