@@ -10,10 +10,7 @@ export const metadata: Metadata = {
   title: "Whatt Dash — WhatsApp Business Dashboard",
   description: "Secure WhatsApp Business Dashboard",
   icons: {
-    icon: [
-      { url: "/icon.svg", type: "image/svg+xml" },
-      { url: "/favicon.ico", sizes: "any" },
-    ],
+    icon: "https://cdn.shopify.com/s/files/1/0904/3168/4923/files/Bio_Shoo_Favicon.png?v=1767101139",
   },
 };
 
