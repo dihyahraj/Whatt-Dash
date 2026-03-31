@@ -384,17 +384,20 @@ export default function Dashboard() {
   function ChatMenu({ convo, onClose }: { convo: ConversationWithLastMessage; onClose: () => void }) {
     const [showLabels, setShowLabels] = useState(false);
     return (
-      <div className="absolute right-2 top-full mt-1 z-[100] bg-[#233138] rounded-xl shadow-2xl py-1.5 min-w-[190px] border border-white/[0.1]" onClick={(e) => e.stopPropagation()}>
+      <div className="absolute right-2 top-full mt-1 z-[100] bg-[#233138] rounded-xl shadow-2xl py-1.5 min-w-[190px] border border-white/[0.1]" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
         <MI i="📌" l={convo.is_pinned ? "Unpin chat" : "Pin chat"} o={() => { act(`/api/conversations/${convo.id}/pin`, { pinned: !convo.is_pinned }); onClose(); }}/>
         <MI i={convo.is_muted ? "🔔" : "🔕"} l={convo.is_muted ? "Unmute" : "Mute"} o={() => { act(`/api/conversations/${convo.id}/mute`, { muted: !convo.is_muted }); onClose(); }}/>
         <MI i="📩" l="Mark as unread" o={() => { act(`/api/conversations/${convo.id}/unread`, { unread_count: 1 }); onClose(); }}/>
-        <MI i="🏷️" l="Labels" o={() => setShowLabels(!showLabels)}/>
+        <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowLabels(!showLabels); }} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-[13px] text-white/85 hover:bg-white/[0.06]">
+          <span className="w-5 text-center">🏷️</span><span>Labels</span>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`ml-auto transition-transform ${showLabels ? "rotate-180" : ""}`}><path d="M6 9l6 6 6-6"/></svg>
+        </button>
         {showLabels && (
-          <div className="px-2 py-1.5 border-t border-white/[0.06]">
+          <div className="px-2 py-1.5 border-t border-white/[0.06]" onClick={(e) => e.stopPropagation()}>
             {labels.map((l) => {
               const has = convo.labels?.some((cl: Label) => cl.id === l.id);
               return (
-                <button key={l.id} onClick={() => toggleLabel(convo.id, l.id, !!has)} className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/[0.06] text-[12px]">
+                <button key={l.id} onClick={(e) => { e.stopPropagation(); toggleLabel(convo.id, l.id, !!has); }} className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/[0.06] text-[12px]">
                   <span className="w-3 h-3 rounded-full flex-shrink-0 border-2" style={{ background: has ? l.color : "transparent", borderColor: l.color }}/>
                   <span className={has ? "text-white" : "text-white/50"}>{l.name}</span>
                 </button>
@@ -574,17 +577,20 @@ export default function Dashboard() {
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
                   </button>
                   {headerMenu && (
-                    <div className="absolute right-0 top-full mt-1 z-[100] bg-[#233138] rounded-xl shadow-2xl py-1.5 min-w-[200px] border border-white/[0.1]" onClick={(e) => e.stopPropagation()}>
+                    <div className="absolute right-0 top-full mt-1 z-[100] bg-[#233138] rounded-xl shadow-2xl py-1.5 min-w-[200px] border border-white/[0.1]" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
                       <MI i="📌" l={sel.is_pinned ? "Unpin chat" : "Pin chat"} o={() => act(`/api/conversations/${sel.id}/pin`, { pinned: !sel.is_pinned })}/>
                       <MI i={sel.is_muted ? "🔔" : "🔕"} l={sel.is_muted ? "Unmute" : "Mute"} o={() => act(`/api/conversations/${sel.id}/mute`, { muted: !sel.is_muted })}/>
                       <MI i="📩" l="Mark as unread" o={() => act(`/api/conversations/${sel.id}/unread`, { unread_count: 1 })}/>
-                      <MI i="🏷️" l="Labels" o={() => { setShowLabelMenu(showLabelMenu === sel.id ? null : sel.id); }}/>
+                      <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowLabelMenu(showLabelMenu === sel.id ? null : sel.id); }} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-[13px] text-white/85 hover:bg-white/[0.06]">
+                        <span className="w-5 text-center">🏷️</span><span>Labels</span>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`ml-auto transition-transform ${showLabelMenu === sel.id ? "rotate-180" : ""}`}><path d="M6 9l6 6 6-6"/></svg>
+                      </button>
                       {showLabelMenu === sel.id && (
-                        <div className="px-2 py-1.5 border-t border-white/[0.06]">
+                        <div className="px-2 py-1.5 border-t border-white/[0.06]" onClick={(e) => e.stopPropagation()}>
                           {labels.map((l) => {
                             const has = sel.labels?.some((cl: Label) => cl.id === l.id);
                             return (
-                              <button key={l.id} onClick={() => toggleLabel(sel.id, l.id, !!has)} className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/[0.06] text-[12px]">
+                              <button key={l.id} onClick={(e) => { e.stopPropagation(); toggleLabel(sel.id, l.id, !!has); }} className="w-full flex items-center gap-2 px-2 py-1.5 rounded hover:bg-white/[0.06] text-[12px]">
                                 <span className="w-3 h-3 rounded-full flex-shrink-0 border-2" style={{ background: has ? l.color : "transparent", borderColor: l.color }}/>
                                 <span className={has ? "text-white" : "text-white/50"}>{l.name}</span>
                               </button>
@@ -765,7 +771,7 @@ export default function Dashboard() {
       {imgPreview && <div className="fixed inset-0 z-[200] bg-black/95 flex items-center justify-center" onClick={() => setImgPreview(null)}><button className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white text-xl">✕</button><img src={imgPreview} alt="" className="max-w-[90vw] max-h-[90vh] object-contain" onClick={(e) => e.stopPropagation()}/></div>}
 
       {/* Click-away to close menus */}
-      {(chatMenuId || msgMenuId || headerMenu || reactPickerId) && <div className="fixed inset-0 z-[90]" onClick={() => { setChatMenuId(null); setMsgMenuId(null); setHeaderMenu(false); setReactPickerId(null); }}/>}
+      {(chatMenuId || msgMenuId || headerMenu || reactPickerId) && <div className="fixed inset-0 z-[90]" onClick={() => { setChatMenuId(null); setMsgMenuId(null); setHeaderMenu(false); setReactPickerId(null); setShowLabelMenu(null); }}/>}
     </div>
   );
 }
