@@ -50,7 +50,8 @@ export default function Dashboard() {
   const [showArchived, setShowArchived] = useState(false);
   const [filter, setFilter] = useState<"all" | "unread" | string>("all"); // "all", "unread", or label_id
   const [labels, setLabels] = useState<Label[]>([]);
-  const [showLabelMenu, setShowLabelMenu] = useState<string | null>(null); // convo id
+  const [showLabelMenu, setShowLabelMenu] = useState<string | null>(null); // header menu labels
+  const [chatLabelOpen, setChatLabelOpen] = useState<string | null>(null); // sidebar menu labels
   const [newLabelName, setNewLabelName] = useState("");
   const [newLabelColor, setNewLabelColor] = useState("#10b981");
 
@@ -352,7 +353,7 @@ export default function Dashboard() {
 
   // Escape key
   useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === "Escape") { setReplyTo(null); setChatMenuId(null); setMsgMenuId(null); setReactPickerId(null); setShowEmoji(false); setHeaderMenu(false); setImgPreview(null); setShowChatSearch(false); if (isRecording) cancelRecording(); } };
+    const h = (e: KeyboardEvent) => { if (e.key === "Escape") { setReplyTo(null); setChatMenuId(null); setMsgMenuId(null); setReactPickerId(null); setShowEmoji(false); setHeaderMenu(false); setImgPreview(null); setShowChatSearch(false); setChatLabelOpen(null); setShowLabelMenu(null); if (isRecording) cancelRecording(); } };
     document.addEventListener("keydown", h); return () => document.removeEventListener("keydown", h);
   }, []);
 
@@ -399,17 +400,17 @@ export default function Dashboard() {
 
   // Chat menu dropdown
   function ChatMenu({ convo, onClose }: { convo: ConversationWithLastMessage; onClose: () => void }) {
-    const [showLabels, setShowLabels] = useState(false);
+    const labelsOpen = chatLabelOpen === convo.id;
     return (
       <div className="absolute right-2 top-full mt-1 z-[100] bg-[#233138] rounded-xl shadow-2xl py-1.5 min-w-[190px] border border-white/[0.1]" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
         <MI i="📌" l={convo.is_pinned ? "Unpin chat" : "Pin chat"} o={() => { act(`/api/conversations/${convo.id}/pin`, { pinned: !convo.is_pinned }); onClose(); }}/>
         <MI i={convo.is_muted ? "🔔" : "🔕"} l={convo.is_muted ? "Unmute" : "Mute"} o={() => { act(`/api/conversations/${convo.id}/mute`, { muted: !convo.is_muted }); onClose(); }}/>
         <MI i="📩" l="Mark as unread" o={() => { act(`/api/conversations/${convo.id}/unread`, { unread_count: 1 }); onClose(); }}/>
-        <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowLabels(!showLabels); }} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-[13px] text-white/85 hover:bg-white/[0.06]">
+        <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setChatLabelOpen(labelsOpen ? null : convo.id); }} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-[13px] text-white/85 hover:bg-white/[0.06]">
           <span className="w-5 text-center">🏷️</span><span>Labels</span>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`ml-auto transition-transform ${showLabels ? "rotate-180" : ""}`}><path d="M6 9l6 6 6-6"/></svg>
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`ml-auto transition-transform ${labelsOpen ? "rotate-180" : ""}`}><path d="M6 9l6 6 6-6"/></svg>
         </button>
-        {showLabels && (
+        {labelsOpen && (
           <div className="px-2 py-1.5 border-t border-white/[0.06]" onClick={(e) => e.stopPropagation()}>
             {labels.map((l) => {
               const has = convo.labels?.some((cl: Label) => cl.id === l.id);
@@ -788,7 +789,7 @@ export default function Dashboard() {
       {imgPreview && <div className="fixed inset-0 z-[200] bg-black/95 flex items-center justify-center" onClick={() => setImgPreview(null)}><button className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white text-xl">✕</button><img src={imgPreview} alt="" className="max-w-[90vw] max-h-[90vh] object-contain" onClick={(e) => e.stopPropagation()}/></div>}
 
       {/* Click-away to close menus */}
-      {(chatMenuId || msgMenuId || headerMenu || reactPickerId) && <div className="fixed inset-0 z-[90]" onClick={() => { setChatMenuId(null); setMsgMenuId(null); setHeaderMenu(false); setReactPickerId(null); setShowLabelMenu(null); }}/>}
+      {(chatMenuId || msgMenuId || headerMenu || reactPickerId) && <div className="fixed inset-0 z-[90]" onClick={() => { setChatMenuId(null); setMsgMenuId(null); setHeaderMenu(false); setReactPickerId(null); setShowLabelMenu(null); setChatLabelOpen(null); }}/>}
     </div>
   );
 }
