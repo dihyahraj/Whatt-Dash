@@ -2,11 +2,9 @@
 
 import { useState } from "react";
 import { useAuth } from "@/components/AuthProvider";
-import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
   const { signIn, user, loading } = useAuth();
-  const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -14,7 +12,7 @@ export default function LoginPage() {
   const [showPw, setShowPw] = useState(false);
 
   // If already logged in, redirect
-  if (!loading && user) { router.push("/"); return null; }
+  if (!loading && user) { window.location.href = "/"; return null; }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -22,7 +20,7 @@ export default function LoginPage() {
     setError(""); setBusy(true);
     const { error: err } = await signIn(email.trim(), password);
     if (err) { setError(err); setBusy(false); }
-    else router.push("/");
+    else window.location.href = "/";
   }
 
   if (loading) return (

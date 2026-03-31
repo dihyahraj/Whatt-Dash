@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useEffect, useState, useMemo, ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, useMemo, ReactNode, useCallback } from "react";
 import { createClient, SupabaseClient, User } from "@supabase/supabase-js";
 
 interface AuthUser {
@@ -15,19 +15,28 @@ interface AuthCtx {
   supabase: SupabaseClient | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error?: string }>;
-  signOut: () => Promise<void>;
+  signOut: () => void;
 }
 
 const AuthContext = createContext<AuthCtx>({
-  user: null,
-  supabase: null,
-  loading: true,
-  signIn: async () => ({}),
-  signOut: async () => {},
+  user: null, supabase: null, loading: true,
+  signIn: async () => ({}), signOut: () => {},
 });
 
-export function useAuth() {
-  return useContext(AuthContext);
+export function useAuth() { return useContext(AuthContext); }
+
+// Server-side check (bypasses RLS completely)
+async function serverCheckAllowed(email: string): Promise<{ allowed: boolean; display_name?: string; role?: string }> {
+  try {
+    const r = await fetch("/api/auth/check", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    return await r.json();
+  } catch {
+    return { allowed: false };
+  }
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -41,99 +50,73 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return createClient(url, key);
   }, []);
 
-  async function checkAllowed(sb: SupabaseClient, authUser: User): Promise<AuthUser | null> {
-    try {
-      const { data, error } = await sb
-        .from("allowed_users")
-        .select("email, display_name, role")
-        .eq("email", authUser.email)
-        .eq("is_active", true)
-        .single();
+  const resolveUser = useCallback(async (authUser: User): Promise<AuthUser | null> => {
+    const check = await serverCheckAllowed(authUser.email || "");
+    if (!check.allowed) return null;
+    return {
+      id: authUser.id,
+      email: authUser.email || "",
+      display_name: check.display_name || authUser.email?.split("@")[0] || "User",
+      role: (check.role as "admin" | "user") || "user",
+    };
+  }, []);
 
-      if (error || !data) return null;
-
-      return {
-        id: authUser.id,
-        email: data.email,
-        display_name: data.display_name || authUser.email?.split("@")[0] || "User",
-        role: data.role as "admin" | "user",
-      };
-    } catch {
-      return null;
-    }
-  }
-
-  // On mount: check session with timeout
+  // Restore session on mount
   useEffect(() => {
     if (!supabase) { setLoading(false); return; }
+    const sb = supabase;
+    let cancelled = false;
 
-    // Safety timeout — never show spinner more than 5s
-    const timeout = setTimeout(() => {
-      setLoading(false);
-    }, 5000);
-
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session?.user) {
-        const allowed = await checkAllowed(supabase, session.user);
-        if (allowed) {
-          setUser(allowed);
-        } else {
-          await supabase.auth.signOut();
-          setUser(null);
+    async function init() {
+      try {
+        const { data: { session } } = await sb.auth.getSession();
+        if (cancelled) return;
+        if (session?.user) {
+          const resolved = await resolveUser(session.user);
+          if (cancelled) return;
+          if (resolved) setUser(resolved);
+          else { await sb.auth.signOut(); setUser(null); }
         }
-      }
-      clearTimeout(timeout);
-      setLoading(false);
-    }).catch(() => {
-      clearTimeout(timeout);
-      setLoading(false);
-    });
+      } catch (e) { console.error("Auth init:", e); }
+      if (!cancelled) setLoading(false);
+    }
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    init();
+    const timeout = setTimeout(() => { if (!cancelled) setLoading(false); }, 5000);
+
+    const { data: { subscription } } = sb.auth.onAuthStateChange(async (event, session) => {
+      if (event === "SIGNED_OUT") { setUser(null); return; }
       if (session?.user) {
-        const allowed = await checkAllowed(supabase, session.user);
-        setUser(allowed);
-      } else {
-        setUser(null);
+        const resolved = await resolveUser(session.user);
+        setUser(resolved);
       }
     });
 
-    return () => { clearTimeout(timeout); subscription.unsubscribe(); };
-  }, [supabase]);
+    return () => { cancelled = true; clearTimeout(timeout); subscription.unsubscribe(); };
+  }, [supabase, resolveUser]);
 
   async function signIn(email: string, password: string): Promise<{ error?: string }> {
     if (!supabase) return { error: "Supabase not configured" };
 
-    const { data: allowedCheck } = await supabase
-      .from("allowed_users")
-      .select("email, is_active")
-      .eq("email", email.toLowerCase().trim())
-      .single();
-
-    if (!allowedCheck) return { error: "Access denied. Your email is not authorized." };
-    if (!allowedCheck.is_active) return { error: "Your account has been deactivated." };
+    // Check via server API (no RLS issue)
+    const check = await serverCheckAllowed(email.toLowerCase().trim());
+    if (!check.allowed) return { error: "Access denied. Email not authorized." };
 
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-
     if (error) return { error: "Invalid email or password." };
 
     if (data.user) {
-      const allowed = await checkAllowed(supabase, data.user);
-      if (allowed) { setUser(allowed); return {}; }
+      const resolved = await resolveUser(data.user);
+      if (resolved) { setUser(resolved); return {}; }
       return { error: "Access denied." };
     }
-
     return { error: "Login failed." };
   }
 
-  async function signOut() {
-    try {
-      if (supabase) await supabase.auth.signOut();
-    } catch {
-      // Ignore signout errors
-    }
+  function signOut() {
+    if (!confirm("Logout karna hai?")) return;
+    if (supabase) supabase.auth.signOut();
     setUser(null);
-    // Force redirect to login
     window.location.href = "/login";
   }
 

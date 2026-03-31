@@ -208,8 +208,12 @@ export default function Dashboard() {
   );
 
   if (!user) {
-    if (typeof window !== "undefined") window.location.href = "/login";
-    return null;
+    window.location.href = "/login";
+    return (
+      <div className="min-h-screen bg-[#0b141a] flex items-center justify-center">
+        <p className="text-white/30 text-sm">Redirecting...</p>
+      </div>
+    );
   }
 
   return (
