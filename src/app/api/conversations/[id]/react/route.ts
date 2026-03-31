@@ -22,13 +22,14 @@ export async function POST(
 
   // Send reaction via WhatsApp if we have the WA msg ID
   if (whatsappMsgId) {
-    await sendWhatsAppReaction(conversation.phone, whatsappMsgId, emoji);
+    // Empty emoji = remove reaction (WhatsApp uses empty string to remove)
+    await sendWhatsAppReaction(conversation.phone, whatsappMsgId, emoji || "");
   }
 
-  // Store reaction in DB
+  // Store reaction in DB (null = removed)
   const { error } = await supabase
     .from("messages")
-    .update({ reaction: emoji })
+    .update({ reaction: emoji || null })
     .eq("id", messageId);
 
   if (error) {

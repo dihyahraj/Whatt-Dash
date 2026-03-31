@@ -55,6 +55,9 @@ export default function Dashboard() {
 
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const chatBoxRef = useRef<HTMLDivElement>(null);
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const [hasNewMsg, setHasNewMsg] = useState(false);
   const sel = convos.find((c) => c.id === selId);
 
   // Fetch
@@ -63,8 +66,28 @@ export default function Dashboard() {
   const fetchArchived = useCallback(async () => { try { const r = await fetch("/api/conversations/archived"); const d = await r.json(); if (Array.isArray(d)) setArchived(d); } catch {} }, []);
 
   useEffect(() => { fetchConvos(); fetchArchived(); }, [fetchConvos, fetchArchived]);
-  useEffect(() => { if (selId) { fetchMsgs(selId); fetch(`/api/conversations/${selId}/read`, { method: "POST" }).catch(() => {}); setConvos((p) => p.map((c) => c.id === selId ? { ...c, unread_count: 0 } : c)); } }, [selId, fetchMsgs]);
-  useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [msgs]);
+  useEffect(() => { if (selId) { fetchMsgs(selId); fetch(`/api/conversations/${selId}/read`, { method: "POST" }).catch(() => {}); setConvos((p) => p.map((c) => c.id === selId ? { ...c, unread_count: 0 } : c)); setIsAtBottom(true); } }, [selId, fetchMsgs]);
+
+  // Only auto-scroll when user is at bottom
+  useEffect(() => {
+    if (isAtBottom) { endRef.current?.scrollIntoView({ behavior: "smooth" }); setHasNewMsg(false); }
+    else if (msgs.length > 0) { setHasNewMsg(true); }
+  }, [msgs, isAtBottom]);
+
+  // Track scroll position
+  function handleScroll() {
+    const el = chatBoxRef.current;
+    if (!el) return;
+    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
+    setIsAtBottom(atBottom);
+    if (atBottom) setHasNewMsg(false);
+  }
+
+  function scrollToBottom() {
+    endRef.current?.scrollIntoView({ behavior: "smooth" });
+    setIsAtBottom(true);
+    setHasNewMsg(false);
+  }
 
   // Poll 2s + always mark as read if chat open
   useEffect(() => {
@@ -123,8 +146,10 @@ export default function Dashboard() {
   async function starMsg(id: string, v: boolean) { await fetch(`/api/messages/${id}/star`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ starred: v }) }); setMsgs((p) => p.map((m) => m.id === id ? { ...m, is_starred: v } : m)); setMsgMenuId(null); }
   async function reactMsg(msgId: string, emoji: string) {
     if (!selId) return; const m = msgs.find((x) => x.id === msgId);
-    await fetch(`/api/conversations/${selId}/react`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messageId: msgId, emoji, whatsappMsgId: m?.whatsapp_msg_id || null }) });
-    setMsgs((p) => p.map((x) => x.id === msgId ? { ...x, reaction: emoji } : x)); setReactPickerId(null);
+    // If same emoji, remove reaction (send empty string)
+    const newEmoji = m?.reaction === emoji ? "" : emoji;
+    await fetch(`/api/conversations/${selId}/react`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messageId: msgId, emoji: newEmoji, whatsappMsgId: m?.whatsapp_msg_id || null }) });
+    setMsgs((p) => p.map((x) => x.id === msgId ? { ...x, reaction: newEmoji || null } : x)); setReactPickerId(null);
   }
 
   // Escape key
@@ -323,7 +348,7 @@ export default function Dashboard() {
             )}
 
             {/* Messages */}
-            <div className="flex-1 overflow-y-auto px-4 sm:px-16 py-3" style={{ backgroundColor: "#0b141a" }}>
+            <div ref={chatBoxRef} onScroll={handleScroll} className="flex-1 overflow-y-auto px-4 sm:px-16 py-3 relative" style={{ backgroundColor: "#0b141a" }}>
               {displayMsgs.map((msg, i) => {
                 const isMe = msg.role === "assistant";
                 const replied = msg.reply_to_id ? msgs.find((m) => m.id === msg.reply_to_id) : null;
@@ -335,11 +360,13 @@ export default function Dashboard() {
                         {replied && <div className={`px-2.5 py-1.5 rounded-t-lg text-[11px] border-l-[3px] ${isMe ? "bg-[#025144] border-emerald-300/50" : "bg-[#1d282f] border-purple-400/50"}`}><p className="font-semibold text-[10px] text-emerald-300 mb-0.5">{replied.role === "user" ? (sel?.name || sel?.phone) : "You"}</p><p className="truncate text-white/50">{replied.content}</p></div>}
 
                         <div className={`relative px-2.5 py-1.5 ${msg.message_type === "sticker" ? "bg-transparent" : isMe ? "bg-[#005c4b] rounded-lg rounded-tr-[3px]" : "bg-[#202c33] rounded-lg rounded-tl-[3px]"} ${replied ? "rounded-t-none" : ""}`}>
-                          {/* 3-dot on hover */}
-                          <button onClick={(e) => { e.stopPropagation(); setMsgMenuId(msgMenuId === msg.id ? null : msg.id); setChatMenuId(null); setHeaderMenu(false); }}
-                            className="absolute right-1 top-1 w-6 h-6 rounded-full flex items-center justify-center opacity-0 group-hover/m:opacity-100 z-10 hover:bg-white/10 text-white/40">
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="6" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="18" r="1.5"/></svg>
-                          </button>
+                          {/* Menu button on hover — WhatsApp style */}
+                          <div className={`absolute right-0 top-0 opacity-0 group-hover/m:opacity-100 z-10`}>
+                            <button onClick={(e) => { e.stopPropagation(); setMsgMenuId(msgMenuId === msg.id ? null : msg.id); setChatMenuId(null); setHeaderMenu(false); }}
+                              className={`w-7 h-7 rounded-bl-lg flex items-center justify-center ${isMe ? "bg-[#005c4b] hover:bg-[#04705b]" : "bg-[#202c33] hover:bg-[#28353d]"}`}>
+                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeOpacity="0.6"><path d="M6 9l6 6 6-6"/></svg>
+                            </button>
+                          </div>
 
                           {media(msg)}
                           <div className="flex items-center justify-end gap-0.5 mt-0.5">
@@ -349,7 +376,7 @@ export default function Dashboard() {
                           </div>
                         </div>
 
-                        {msg.reaction && <div className={`absolute -bottom-2.5 ${isMe ? "right-2" : "left-2"} bg-[#182229] border border-white/[0.08] rounded-full px-1.5 py-0.5 text-[12px] shadow cursor-pointer hover:scale-110 transition`} onClick={(e) => { e.stopPropagation(); setReactPickerId(msg.id); }}>{msg.reaction}</div>}
+                        {msg.reaction && <div className={`absolute -bottom-2.5 ${isMe ? "right-2" : "left-2"} bg-[#182229] border border-white/[0.08] rounded-full px-1.5 py-0.5 text-[12px] shadow cursor-pointer hover:scale-110 transition group/react`} onClick={(e) => { e.stopPropagation(); reactMsg(msg.id, msg.reaction!); }} title="Click to remove">{msg.reaction}<span className="hidden group-hover/react:inline text-[9px] ml-0.5 text-white/30">✕</span></div>}
 
                         {/* Msg menu */}
                         {msgMenuId === msg.id && (
@@ -376,6 +403,16 @@ export default function Dashboard() {
               <div ref={endRef}/>
             </div>
 
+            {/* Scroll to bottom arrow */}
+            {!isAtBottom && (
+              <div className="relative">
+                <button onClick={scrollToBottom} className="absolute right-6 -top-14 w-10 h-10 rounded-full bg-[#202c33] border border-white/[0.1] shadow-lg flex items-center justify-center hover:bg-[#2a3942] transition-colors z-20">
+                  {hasNewMsg && <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-emerald-500 text-white text-[10px] font-bold flex items-center justify-center">!</span>}
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M6 9l6 6 6-6"/></svg>
+                </button>
+              </div>
+            )}
+
             {/* Reply */}
             {replyTo && (
               <div className="px-4 sm:px-16 pt-2" style={{ background: "#1a2028" }}>
@@ -401,6 +438,23 @@ export default function Dashboard() {
             {/* Input */}
             <div className="px-4 sm:px-12 py-2 flex items-center gap-2" style={{ background: "#202c33" }}>
               <button onClick={(e) => { e.stopPropagation(); setShowEmoji(!showEmoji); }} className="w-10 h-10 rounded-full hover:bg-white/[0.08] flex items-center justify-center text-white/40 text-[22px] flex-shrink-0">😀</button>
+              <button onClick={() => document.getElementById("file-input")?.click()} className="w-10 h-10 rounded-full hover:bg-white/[0.08] flex items-center justify-center text-white/40 flex-shrink-0" title="Attach file">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+              </button>
+              <input id="file-input" type="file" className="hidden" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar" onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file || !selId) return;
+                setSending(true);
+                try {
+                  const fd = new FormData();
+                  fd.append("file", file);
+                  fd.append("caption", "");
+                  const res = await fetch(`/api/conversations/${selId}/send-media`, { method: "POST", body: fd });
+                  if (!res.ok) { const d = await res.json(); alert("Error: " + JSON.stringify(d)); }
+                  else { fetchMsgs(selId); scrollToBottom(); }
+                } catch (err) { alert("Error: " + String(err)); }
+                finally { setSending(false); e.target.value = ""; }
+              }}/>
               <div className="flex-1 bg-[#2a3942] rounded-lg px-4 py-2.5"><input ref={inputRef} type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) handleSend(); }} placeholder="Type a message" className="w-full bg-transparent text-[14px] text-white placeholder:text-white/30 focus:outline-none"/></div>
               <button onClick={handleSend} disabled={sending || !input.trim()} className="w-10 h-10 rounded-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-20 transition flex items-center justify-center flex-shrink-0">
                 {sending ? <svg className="animate-spin" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
