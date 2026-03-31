@@ -32,11 +32,12 @@ export default function AdminPage() {
   }, [user, loading, router]);
 
   const fetchUsers = useCallback(async () => {
-    if (!supabase) return;
-    const { data, error } = await supabase.from("allowed_users").select("*").order("created_at", { ascending: true });
-    if (error) console.error("Fetch users error:", error);
-    if (data) setUsers(data);
-  }, [supabase]);
+    try {
+      const r = await fetch("/api/admin/users");
+      const d = await r.json();
+      if (Array.isArray(d)) setUsers(d);
+    } catch (e) { console.error("Fetch users:", e); }
+  }, []);
 
   useEffect(() => { fetchUsers(); }, [fetchUsers]);
 
@@ -64,25 +65,24 @@ export default function AdminPage() {
   }
 
   async function toggleActive(u: AllowedUser) {
-    if (!supabase || u.email === OWNER_EMAIL) return;
-    const { error } = await supabase.from("allowed_users").update({ is_active: !u.is_active }).eq("id", u.id);
-    if (error) { alert("Error: " + error.message); return; }
+    if (u.email === OWNER_EMAIL) return;
+    const r = await fetch("/api/admin/update-user", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: u.id, updates: { is_active: !u.is_active } }) });
+    if (!r.ok) { alert("Error toggling user"); return; }
     await fetchUsers();
   }
 
   async function changeRole(u: AllowedUser, newRole: string) {
-    if (!supabase || u.email === OWNER_EMAIL) return;
-    const { error } = await supabase.from("allowed_users").update({ role: newRole }).eq("id", u.id);
-    if (error) { alert("Error: " + error.message); return; }
+    if (u.email === OWNER_EMAIL) return;
+    const r = await fetch("/api/admin/update-user", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: u.id, updates: { role: newRole } }) });
+    if (!r.ok) { alert("Error changing role"); return; }
     await fetchUsers();
   }
 
   async function deleteUser(u: AllowedUser) {
     if (u.email === OWNER_EMAIL) { alert("Owner account cannot be deleted!"); return; }
-    if (!confirm(`Delete user "${u.display_name || u.email}"?\n\nThis will remove their access permanently.`)) return;
-    if (!supabase) return;
-    const { error } = await supabase.from("allowed_users").delete().eq("id", u.id);
-    if (error) { alert("Error: " + error.message); return; }
+    if (!confirm(`Delete user "${u.display_name || u.email}"?`)) return;
+    const r = await fetch("/api/admin/delete-user", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: u.id }) });
+    if (!r.ok) { alert("Error deleting user"); return; }
     setMsg(`🗑️ User "${u.email}" deleted.`);
     await fetchUsers();
   }
