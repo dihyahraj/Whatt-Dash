@@ -305,7 +305,7 @@ export default function Dashboard() {
       chunksRef.current = [];
       mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       mr.onstop = () => { stream.getTracks().forEach((t) => t.stop()); };
-      mr.start();
+      mr.start(250); // collect data every 250ms for reliable chunks
       mediaRecorderRef.current = mr;
       setIsRecording(true);
       setRecordingTime(0);
@@ -330,11 +330,15 @@ export default function Dashboard() {
     if (!mediaRecorderRef.current || !selId) return;
     const mr = mediaRecorderRef.current;
     
-    await new Promise<void>((resolve) => {
-      const origStop = mr.onstop;
-      mr.onstop = (e) => { if (origStop && typeof origStop === "function") origStop.call(mr, e); resolve(); };
-      if (mr.state !== "inactive") mr.stop(); else resolve();
-    });
+    // Stop and wait for all data to be collected
+    if (mr.state !== "inactive") {
+      await new Promise<void>((resolve) => {
+        mr.addEventListener("stop", () => resolve(), { once: true });
+        mr.stop();
+      });
+      // Small delay to ensure ondataavailable has processed
+      await new Promise((r) => setTimeout(r, 100));
+    }
 
     if (timerRef.current) clearInterval(timerRef.current);
     setIsRecording(false);
@@ -343,15 +347,16 @@ export default function Dashboard() {
     const actualMime = recMimeRef.current;
     const ext = actualMime.includes("ogg") ? "ogg" : actualMime.includes("mp4") ? "m4a" : "webm";
     const blob = new Blob(chunksRef.current, { type: actualMime });
-    if (blob.size === 0) return;
+    console.log(`Voice recording: ${chunksRef.current.length} chunks, ${blob.size} bytes, mime: ${actualMime}, ext: ${ext}`);
+    if (blob.size < 100) { console.error("Recording too small, discarding"); chunksRef.current = []; return; }
 
-    // Optimistic: show sending indicator
     const tempId = `temp_voice_${Date.now()}`;
     addOptimisticMsg(tempId, "🎵 Sending voice...", "audio");
 
     setSending(true);
     try {
       const file = new File([blob], `voice_${Date.now()}.${ext}`, { type: actualMime });
+      console.log(`Sending voice file: ${file.name}, size: ${file.size}, type: ${file.type}`);
       const fd = new FormData();
       fd.append("file", file);
       fd.append("caption", "");

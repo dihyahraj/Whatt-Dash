@@ -4,7 +4,7 @@
 
 import { getSupabase } from "@/lib/supabase";
 
-const GRAPH_API = "https://graph.facebook.com/v22.0";
+const GRAPH_API = "https://graph.facebook.com/v25.0";
 const BUCKET = "whatsapp-media";
 
 // Ensure bucket exists (call once on first use)

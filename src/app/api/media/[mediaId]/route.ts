@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 
-const GRAPH_API = "https://graph.facebook.com/v22.0";
+const GRAPH_API = "https://graph.facebook.com/v25.0";
 
 export async function GET(
   _request: NextRequest,

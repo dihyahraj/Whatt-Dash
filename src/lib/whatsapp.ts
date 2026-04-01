@@ -2,7 +2,7 @@
 // WHATT-DASH: Enhanced WhatsApp Cloud API Helper
 // ============================================================
 
-const GRAPH_API = "https://graph.facebook.com/v22.0";
+const GRAPH_API = "https://graph.facebook.com/v25.0";
 
 function getHeaders() {
   return {
