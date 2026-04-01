@@ -60,35 +60,24 @@ export async function POST(
 
     const { data: urlData } = sb.storage.from("whatsapp-media").getPublicUrl(storagePath);
     const publicUrl = urlData.publicUrl;
+    console.log("Supabase public URL:", publicUrl);
 
     // 2. Determine type
     const isVoice = file.name.includes("voice_");
     let waType = "document";
     let waMime = file.type;
-    let waFilename = file.name;
     if (file.type.startsWith("image/")) waType = "image";
     else if (file.type.startsWith("video/")) waType = "video";
-    else if (isVoice) {
-      // Voice note: tell WhatsApp it's ogg/opus (same opus codec, WhatsApp might accept)
-      waType = "audio";
-      waMime = "audio/ogg; codecs=opus";
-      waFilename = file.name.replace(".webm", ".ogg");
-    }
-    else if (file.type.startsWith("audio/") && !file.type.includes("webm")) { waType = "audio"; }
+    else if (file.type.startsWith("audio/") && !file.type.includes("webm") && !isVoice) waType = "audio";
+    // Voice notes: keep as document type (browser webm → WhatsApp can't play as voice)
+    // Non-webm audio (aac, mp3, ogg): send as audio type
 
-    // 3. Upload to WhatsApp Media API
-    let waMediaId = await uploadToWhatsApp(arrayBuffer, waMime, waFilename);
-    
-    // If voice upload as ogg failed, try original webm format
-    if (!waMediaId && isVoice) {
-      console.log("Retrying voice upload with original webm format...");
-      waMediaId = await uploadToWhatsApp(arrayBuffer, file.type, file.name);
-    }
-    
-    // If still no media ID for voice, fall back to document type
-    if (!waMediaId && isVoice) {
-      console.log("Voice upload failed, falling back to document type");
-      waType = "document";
+    // 3. Upload to WhatsApp Media API (skip for voice — use public URL directly)
+    let waMediaId: string | null = null;
+    if (!isVoice) {
+      waMediaId = await uploadToWhatsApp(arrayBuffer, waMime, file.name);
+    } else {
+      console.log("Voice note: skipping Media API upload, using Supabase public URL as document");
     }
 
     // 4. Send message
@@ -140,6 +129,7 @@ export async function POST(
     }
 
     const waMsgId = waData.messages?.[0]?.id || null;
+    console.log("WhatsApp message sent! ID:", waMsgId, "type:", waType, "isVoice:", isVoice);
 
     // 5. Store in DB
     const { data: msg, error: msgErr } = await supabase.from("messages").insert({
