@@ -255,21 +255,29 @@ export default function Dashboard() {
     closeMenus(); pausePoll();
     if (body && typeof body === "object") {
       const b = body as Record<string, unknown>;
-      setConvos((p) => p.map((c) => {
-        const cid = url.match(/conversations\/([^/]+)\//)?.[1];
-        if (c.id !== cid) return c;
-        if ("pinned" in b) return { ...c, is_pinned: !!b.pinned };
-        if ("muted" in b) return { ...c, is_muted: !!b.muted };
-        if ("unread_count" in b) return { ...c, unread_count: b.unread_count as number };
-        return c;
-      }));
-      if ("archived" in b && (b as Record<string, unknown>).archived) {
-        const cid = url.match(/conversations\/([^/]+)\//)?.[1];
+      const cid = url.match(/conversations\/([^/]+)\//)?.[1];
+      
+      if ("archived" in b && b.archived) {
+        // Archive: move from convos → archived
+        const chat = convos.find((c) => c.id === cid);
         setConvos((p) => p.filter((c) => c.id !== cid));
+        if (chat) setArchived((p) => [{ ...chat, is_archived: true }, ...p]);
         if (selId === cid) { setSelId(null); setMsgs([]); }
+      } else {
+        // Pin/Mute/Unread
+        setConvos((p) => p.map((c) => {
+          if (c.id !== cid) return c;
+          if ("pinned" in b) return { ...c, is_pinned: !!b.pinned };
+          if ("muted" in b) return { ...c, is_muted: !!b.muted };
+          if ("unread_count" in b) return { ...c, unread_count: b.unread_count as number };
+          return c;
+        }));
       }
     }
-    fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined }).catch(() => {});
+    // Fire request, then refresh after server completes
+    fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined })
+      .then(() => { skipPollRef.current = false; fetchConvos(); fetchArchived(); })
+      .catch(() => { skipPollRef.current = false; fetchConvos(); fetchArchived(); });
   }
 
   // Delete chat — instant remove
@@ -277,15 +285,22 @@ export default function Dashboard() {
     if (!confirm("Puri chat delete hogi! Supabase se bhi mit jayegi.")) return;
     closeMenus(); pausePoll();
     setConvos((p) => p.filter((c) => c.id !== id));
+    setArchived((p) => p.filter((c) => c.id !== id));
     if (selId === id) { setSelId(null); setMsgs([]); }
-    fetch(`/api/conversations/${id}/delete`, { method: "POST" }).catch(() => {});
+    fetch(`/api/conversations/${id}/delete`, { method: "POST" })
+      .then(() => { skipPollRef.current = false; fetchConvos(); fetchArchived(); })
+      .catch(() => { skipPollRef.current = false; fetchConvos(); fetchArchived(); });
   }
 
   // Unarchive — instant move
   async function unarchive(id: string) {
     pausePoll();
+    const chat = archived.find((c) => c.id === id);
     setArchived((p) => p.filter((c) => c.id !== id));
-    fetch(`/api/conversations/${id}/archive`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ archived: false }) }).catch(() => {});
+    if (chat) setConvos((p) => [{ ...chat, is_archived: false }, ...p]);
+    fetch(`/api/conversations/${id}/archive`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ archived: false }) })
+      .then(() => { skipPollRef.current = false; fetchConvos(); fetchArchived(); })
+      .catch(() => { skipPollRef.current = false; fetchConvos(); fetchArchived(); });
   }
 
   // Star message — instant toggle
@@ -555,7 +570,7 @@ export default function Dashboard() {
           {/* ═══ ARCHIVED ═══ */}
           {archived.length > 0 && (
             <div className="border-t border-white/[0.06]">
-              <button onClick={() => { setShowArchived(!showArchived); if (!showArchived) fetchArchived(); }} className="w-full flex items-center gap-3 px-4 py-3 text-white/50 hover:bg-white/[0.03]">
+              <button onClick={async () => { setShowArchived(!showArchived); if (!showArchived) { try { const r = await fetch("/api/conversations/archived"); const d = await r.json(); if (Array.isArray(d)) setArchived(d); } catch {} } }} className="w-full flex items-center gap-3 px-4 py-3 text-white/50 hover:bg-white/[0.03]">
                 <span>📦</span>
                 <span className="text-[13px] font-medium">Archived ({archived.length})</span>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`ml-auto transition-transform ${showArchived ? "rotate-180" : ""}`}><path d="M6 9l6 6 6-6"/></svg>
