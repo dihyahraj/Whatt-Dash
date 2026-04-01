@@ -54,6 +54,7 @@ export default function Dashboard() {
   const [chatLabelOpen, setChatLabelOpen] = useState<string | null>(null); // sidebar menu labels
   const [newLabelName, setNewLabelName] = useState("");
   const [newLabelColor, setNewLabelColor] = useState("#10b981");
+  const [forwardMsg, setForwardMsg] = useState<Message | null>(null); // message to forward
 
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -271,6 +272,23 @@ export default function Dashboard() {
     fetchConvos(); setShowLabelMenu(null);
   }
 
+  // Forward message to another conversation
+  async function forwardMessage(msgId: string, targetConvoId: string) {
+    await fetch(`/api/messages/${msgId}/forward`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ targetConversationId: targetConvoId }) });
+    setForwardMsg(null);
+    fetchConvos();
+  }
+
+  // Save contact as vCard
+  function saveContact(convoId: string) {
+    window.open(`/api/conversations/${convoId}/save-contact`, "_blank");
+  }
+
+  // Download all contacts as CSV (admin)
+  function downloadContactsCsv() {
+    window.open("/api/contacts/export", "_blank");
+  }
+
   // Voice recording
   async function startRecording() {
     try {
@@ -354,7 +372,7 @@ export default function Dashboard() {
 
   // Escape key
   useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === "Escape") { setReplyTo(null); setChatMenuId(null); setMsgMenuId(null); setReactPickerId(null); setShowEmoji(false); setHeaderMenu(false); setImgPreview(null); setShowChatSearch(false); setChatLabelOpen(null); setShowLabelMenu(null); if (isRecording) cancelRecording(); } };
+    const h = (e: KeyboardEvent) => { if (e.key === "Escape") { setReplyTo(null); setChatMenuId(null); setMsgMenuId(null); setReactPickerId(null); setShowEmoji(false); setHeaderMenu(false); setImgPreview(null); setShowChatSearch(false); setChatLabelOpen(null); setShowLabelMenu(null); setForwardMsg(null); if (isRecording) cancelRecording(); } };
     document.addEventListener("keydown", h); return () => document.removeEventListener("keydown", h);
   }, []);
 
@@ -407,6 +425,7 @@ export default function Dashboard() {
         <MI i="📌" l={convo.is_pinned ? "Unpin chat" : "Pin chat"} o={() => { act(`/api/conversations/${convo.id}/pin`, { pinned: !convo.is_pinned }); onClose(); }}/>
         <MI i={convo.is_muted ? "🔔" : "🔕"} l={convo.is_muted ? "Unmute" : "Mute"} o={() => { act(`/api/conversations/${convo.id}/mute`, { muted: !convo.is_muted }); onClose(); }}/>
         <MI i="📩" l="Mark as unread" o={() => { act(`/api/conversations/${convo.id}/unread`, { unread_count: 1 }); onClose(); }}/>
+        <MI i="💾" l="Save contact" o={() => { saveContact(convo.id); onClose(); }}/>
         <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setChatLabelOpen(labelsOpen ? null : convo.id); }} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-[13px] text-white/85 hover:bg-white/[0.06]">
           <span className="w-5 text-center">🏷️</span><span>Labels</span>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`ml-auto transition-transform ${labelsOpen ? "rotate-180" : ""}`}><path d="M6 9l6 6 6-6"/></svg>
@@ -469,6 +488,11 @@ export default function Dashboard() {
                 </button>
               )}
               <button onClick={() => setShowSearch(!showSearch)} className="w-8 h-8 rounded-full hover:bg-white/[0.06] flex items-center justify-center text-white/40 hover:text-white/70"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></button>
+              {user?.role === "admin" && (
+                <button onClick={downloadContactsCsv} className="w-8 h-8 rounded-full hover:bg-white/[0.06] flex items-center justify-center text-white/40 hover:text-white/70" title="Download Contacts CSV">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                </button>
+              )}
               <button onClick={signOut} className="w-8 h-8 rounded-full hover:bg-white/[0.06] flex items-center justify-center text-white/40 hover:text-red-400" title="Sign Out">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
               </button>
@@ -600,6 +624,7 @@ export default function Dashboard() {
                       <MI i="📌" l={sel.is_pinned ? "Unpin chat" : "Pin chat"} o={() => act(`/api/conversations/${sel.id}/pin`, { pinned: !sel.is_pinned })}/>
                       <MI i={sel.is_muted ? "🔔" : "🔕"} l={sel.is_muted ? "Unmute" : "Mute"} o={() => act(`/api/conversations/${sel.id}/mute`, { muted: !sel.is_muted })}/>
                       <MI i="📩" l="Mark as unread" o={() => act(`/api/conversations/${sel.id}/unread`, { unread_count: 1 })}/>
+                      <MI i="💾" l="Save contact" o={() => { saveContact(sel.id); setHeaderMenu(false); }}/>
                       <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowLabelMenu(showLabelMenu === sel.id ? null : sel.id); }} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-[13px] text-white/85 hover:bg-white/[0.06]">
                         <span className="w-5 text-center">🏷️</span><span>Labels</span>
                         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`ml-auto transition-transform ${showLabelMenu === sel.id ? "rotate-180" : ""}`}><path d="M6 9l6 6 6-6"/></svg>
@@ -675,6 +700,7 @@ export default function Dashboard() {
                             <MI i="😀" l="React" o={() => { setReactPickerId(msg.id); setMsgMenuId(null); }}/>
                             <MI i={msg.is_starred ? "⭐" : "☆"} l={msg.is_starred ? "Unstar" : "Star"} o={() => starMsg(msg.id, !msg.is_starred)}/>
                             <MI i="📋" l="Copy" o={() => { navigator.clipboard.writeText(msg.content); setMsgMenuId(null); }}/>
+                            <MI i="↪️" l="Forward" o={() => { setForwardMsg(msg); setMsgMenuId(null); }}/>
                             {user?.role === "admin" && <>
                               <div className="h-px bg-white/[0.06] my-1"/>
                               <MI i="🗑️" l="Delete" o={() => delMsg(msg.id)} d/>
@@ -788,6 +814,38 @@ export default function Dashboard() {
 
       {/* Image Preview */}
       {imgPreview && <div className="fixed inset-0 z-[200] bg-black/95 flex items-center justify-center" onClick={() => setImgPreview(null)}><button className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white text-xl">✕</button><img src={imgPreview} alt="" className="max-w-[90vw] max-h-[90vh] object-contain" onClick={(e) => e.stopPropagation()}/></div>}
+
+      {/* Forward Modal */}
+      {forwardMsg && (
+        <div className="fixed inset-0 z-[200] bg-black/70 flex items-center justify-center" onClick={() => setForwardMsg(null)}>
+          <div className="bg-[#111b21] rounded-xl border border-white/[0.08] shadow-2xl w-[340px] max-h-[500px] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="px-4 py-3 border-b border-white/[0.06] flex items-center justify-between">
+              <h3 className="text-[14px] font-semibold text-white">Forward message to</h3>
+              <button onClick={() => setForwardMsg(null)} className="text-white/30 hover:text-white/60 text-lg">✕</button>
+            </div>
+            <div className="px-3 py-2 border-b border-white/[0.06]">
+              <div className="bg-[#202c33] rounded-lg px-3 py-1.5 text-[12px] text-white/50 truncate">
+                ↪️ {forwardMsg.content?.substring(0, 80)}{(forwardMsg.content?.length || 0) > 80 ? "..." : ""}
+              </div>
+            </div>
+            <div className="overflow-y-auto max-h-[380px]">
+              {convos.filter((c) => c.id !== forwardMsg.conversation_id).map((c) => (
+                <button key={c.id} onClick={() => forwardMessage(forwardMsg.id, c.id)} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/[0.04] text-left">
+                  <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${aclr(c.id)} flex items-center justify-center text-white text-[12px] font-bold flex-shrink-0`}>{ini(c.name, c.phone)}</div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] text-white font-medium truncate">{c.name || c.phone}</p>
+                    <p className="text-[11px] text-white/35 font-mono">{c.phone}</p>
+                  </div>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="2"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
+                </button>
+              ))}
+              {convos.filter((c) => c.id !== forwardMsg.conversation_id).length === 0 && (
+                <p className="text-center text-[13px] text-white/30 py-8">No other chats to forward to</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Click-away to close menus */}
       {(chatMenuId || msgMenuId || headerMenu || reactPickerId) && <div className="fixed inset-0 z-[90]" onClick={() => { setChatMenuId(null); setMsgMenuId(null); setHeaderMenu(false); setReactPickerId(null); setShowLabelMenu(null); setChatLabelOpen(null); }}/>}
