@@ -63,13 +63,6 @@ export default function Dashboard() {
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [hasNewMsg, setHasNewMsg] = useState(false);
   
-  // Voice recording
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordingTime, setRecordingTime] = useState(0);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const timerRef = useRef<NodeJS.Timeout | null>(null);
-  const recMimeRef = useRef<string>("audio/webm");
   const sel = convos.find((c) => c.id === selId);
 
   // Fetch
@@ -292,81 +285,6 @@ export default function Dashboard() {
     window.open("/api/contacts/export", "_blank");
   }
 
-  // Voice recording
-  async function startRecording() {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      // Try ogg first (WhatsApp native), then webm, then mp4
-      const mimeOptions = ["audio/ogg;codecs=opus", "audio/ogg", "audio/mp4", "audio/webm;codecs=opus", "audio/webm"];
-      const recMime = mimeOptions.find((m) => MediaRecorder.isTypeSupported(m)) || "";
-      console.log("Recording with mime:", recMime || "default");
-      const mr = new MediaRecorder(stream, recMime ? { mimeType: recMime } : {});
-      recMimeRef.current = recMime || mr.mimeType || "audio/webm";
-      chunksRef.current = [];
-      mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
-      mr.onstop = () => { stream.getTracks().forEach((t) => t.stop()); };
-      mr.start(250); // collect data every 250ms for reliable chunks
-      mediaRecorderRef.current = mr;
-      setIsRecording(true);
-      setRecordingTime(0);
-      timerRef.current = setInterval(() => setRecordingTime((t) => t + 1), 1000);
-    } catch {
-      alert("Microphone access denied. Browser settings mein mic allow karo.");
-    }
-  }
-
-  function cancelRecording() {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-      mediaRecorderRef.current.onstop = () => { mediaRecorderRef.current?.stream.getTracks().forEach((t) => t.stop()); };
-      mediaRecorderRef.current.stop();
-    }
-    if (timerRef.current) clearInterval(timerRef.current);
-    setIsRecording(false);
-    setRecordingTime(0);
-    chunksRef.current = [];
-  }
-
-  async function sendRecording() {
-    if (!mediaRecorderRef.current || !selId) return;
-    const mr = mediaRecorderRef.current;
-    
-    // Stop and wait for all data to be collected
-    if (mr.state !== "inactive") {
-      await new Promise<void>((resolve) => {
-        mr.addEventListener("stop", () => resolve(), { once: true });
-        mr.stop();
-      });
-      // Small delay to ensure ondataavailable has processed
-      await new Promise((r) => setTimeout(r, 100));
-    }
-
-    if (timerRef.current) clearInterval(timerRef.current);
-    setIsRecording(false);
-    setRecordingTime(0);
-
-    const actualMime = recMimeRef.current;
-    const ext = actualMime.includes("ogg") ? "ogg" : actualMime.includes("mp4") ? "m4a" : "webm";
-    const blob = new Blob(chunksRef.current, { type: actualMime });
-    console.log(`Voice recording: ${chunksRef.current.length} chunks, ${blob.size} bytes, mime: ${actualMime}, ext: ${ext}`);
-    if (blob.size < 100) { console.error("Recording too small, discarding"); chunksRef.current = []; return; }
-
-    const tempId = `temp_voice_${Date.now()}`;
-    addOptimisticMsg(tempId, "🎵 Sending voice...", "audio");
-
-    setSending(true);
-    try {
-      const file = new File([blob], `voice_${Date.now()}.${ext}`, { type: actualMime });
-      console.log(`Sending voice file: ${file.name}, size: ${file.size}, type: ${file.type}`);
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("caption", "");
-      const res = await fetch(`/api/conversations/${selId}/send-media`, { method: "POST", body: fd });
-      if (!res.ok) { setMsgs((p) => p.filter((m) => m.id !== tempId)); const d = await res.json(); alert("Error: " + JSON.stringify(d)); setSending(false); }
-      else { const real = await res.json(); lastSentIdsRef.current.add(real.id); setMsgs((p) => p.map((m) => m.id === tempId ? { ...real } : m)); setTimeout(() => { setSending(false); setTimeout(() => lastSentIdsRef.current.delete(real.id), 10000); }, 3000); }
-    } catch (err) { setMsgs((p) => p.filter((m) => m.id !== tempId)); alert("Error: " + String(err)); setSending(false); }
-    finally { chunksRef.current = []; }
-  }
-
   // Helper for optimistic messages
   function addOptimisticMsg(tempId: string, content: string, type: string = "text") {
     if (!selId) return;
@@ -383,11 +301,9 @@ export default function Dashboard() {
     setIsAtBottom(true);
   }
 
-  function fmtRecTime(s: number) { const m = Math.floor(s / 60); const ss = s % 60; return `${m}:${ss.toString().padStart(2, "0")}`; }
-
   // Escape key
   useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === "Escape") { setReplyTo(null); setChatMenuId(null); setMsgMenuId(null); setReactPickerId(null); setShowEmoji(false); setHeaderMenu(false); setImgPreview(null); setShowChatSearch(false); setChatLabelOpen(null); setShowLabelMenu(null); setForwardMsg(null); setForwardSelected(new Set()); if (isRecording) cancelRecording(); } };
+    const h = (e: KeyboardEvent) => { if (e.key === "Escape") { setReplyTo(null); setChatMenuId(null); setMsgMenuId(null); setReactPickerId(null); setShowEmoji(false); setHeaderMenu(false); setImgPreview(null); setShowChatSearch(false); setChatLabelOpen(null); setShowLabelMenu(null); setForwardMsg(null); setForwardSelected(new Set()); } };
     document.addEventListener("keydown", h); return () => document.removeEventListener("keydown", h);
   }, []);
 
@@ -769,58 +685,32 @@ export default function Dashboard() {
 
             {/* Input */}
             <div className="px-4 sm:px-12 py-2 flex items-end gap-2" style={{ background: "#202c33" }}>
-              {isRecording ? (
-                /* ── Recording UI ── */
-                <>
-                  <button onClick={cancelRecording} className="w-10 h-10 rounded-full hover:bg-red-500/20 flex items-center justify-center text-red-400 flex-shrink-0" title="Cancel">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                  </button>
-                  <div className="flex-1 bg-[#2a3942] rounded-lg px-4 py-2.5 flex items-center gap-3">
-                    <div className="w-3 h-3 rounded-full bg-red-500 animate-pulse flex-shrink-0"/>
-                    <span className="text-[14px] text-red-400 font-mono">{fmtRecTime(recordingTime)}</span>
-                    <span className="text-[13px] text-white/30">Recording...</span>
-                  </div>
-                  <button onClick={sendRecording} className="w-10 h-10 rounded-full bg-emerald-600 hover:bg-emerald-500 transition flex items-center justify-center flex-shrink-0" title="Send voice">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
-                  </button>
-                </>
-              ) : (
-                /* ── Normal Input UI ── */
-                <>
-                  <button onClick={(e) => { e.stopPropagation(); setShowEmoji(!showEmoji); }} className="w-10 h-10 rounded-full hover:bg-white/[0.08] flex items-center justify-center text-white/40 text-[22px] flex-shrink-0">😀</button>
-                  <button onClick={() => document.getElementById("file-input")?.click()} className="w-10 h-10 rounded-full hover:bg-white/[0.08] flex items-center justify-center text-white/40 flex-shrink-0" title="Attach file">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
-                  </button>
-                  <input id="file-input" type="file" className="hidden" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar" onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    if (!file || !selId) return;
-                    const icon = file.type.startsWith("image/") ? "📷" : file.type.startsWith("video/") ? "🎥" : "📄";
-                    const tempId = `temp_file_${Date.now()}`;
-                    addOptimisticMsg(tempId, `${icon} Sending ${file.name}...`, file.type.startsWith("image/") ? "image" : "document");
-                    setSending(true);
-                    try {
-                      const fd = new FormData();
-                      fd.append("file", file);
-                      fd.append("caption", "");
-                      const res = await fetch(`/api/conversations/${selId}/send-media`, { method: "POST", body: fd });
-                      if (!res.ok) { setMsgs((p) => p.filter((m) => m.id !== tempId)); const d = await res.json(); alert("Error: " + JSON.stringify(d)); setSending(false); }
-                      else { const real = await res.json(); lastSentIdsRef.current.add(real.id); setMsgs((p) => p.map((m) => m.id === tempId ? { ...real } : m)); setTimeout(() => { setSending(false); setTimeout(() => lastSentIdsRef.current.delete(real.id), 10000); }, 3000); }
-                    } catch (err) { setMsgs((p) => p.filter((m) => m.id !== tempId)); alert("Error: " + String(err)); setSending(false); }
-                    finally { e.target.value = ""; }
-                  }}/>
-                  <div className="flex-1 bg-[#2a3942] rounded-lg px-4 py-2.5"><textarea ref={inputRef} value={input} onChange={(e) => { setInput(e.target.value); e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px"; }} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }} placeholder="Type a message" rows={1} className="w-full bg-transparent text-[14px] text-white placeholder:text-white/30 focus:outline-none resize-none leading-[1.4] max-h-[120px] overflow-y-auto" style={{ height: "auto" }}/></div>
-                  {input.trim() ? (
-                    <button onClick={handleSend} disabled={sending} className="w-10 h-10 rounded-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-20 transition flex items-center justify-center flex-shrink-0">
-                      {sending ? <svg className="animate-spin" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-                      : <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>}
-                    </button>
-                  ) : (
-                    <button onClick={startRecording} disabled={sending} className="w-10 h-10 rounded-full hover:bg-white/[0.08] flex items-center justify-center text-white/40 hover:text-emerald-400 transition flex-shrink-0 disabled:opacity-20" title="Voice message">
-                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-                    </button>
-                  )}
-                </>
-              )}
+              <button onClick={(e) => { e.stopPropagation(); setShowEmoji(!showEmoji); }} className="w-10 h-10 rounded-full hover:bg-white/[0.08] flex items-center justify-center text-white/40 text-[22px] flex-shrink-0">😀</button>
+              <button onClick={() => document.getElementById("file-input")?.click()} className="w-10 h-10 rounded-full hover:bg-white/[0.08] flex items-center justify-center text-white/40 flex-shrink-0" title="Attach file">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+              </button>
+              <input id="file-input" type="file" className="hidden" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar" onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file || !selId) return;
+                const icon = file.type.startsWith("image/") ? "📷" : file.type.startsWith("video/") ? "🎥" : "📄";
+                const tempId = `temp_file_${Date.now()}`;
+                addOptimisticMsg(tempId, `${icon} Sending ${file.name}...`, file.type.startsWith("image/") ? "image" : "document");
+                setSending(true);
+                try {
+                  const fd = new FormData();
+                  fd.append("file", file);
+                  fd.append("caption", "");
+                  const res = await fetch(`/api/conversations/${selId}/send-media`, { method: "POST", body: fd });
+                  if (!res.ok) { setMsgs((p) => p.filter((m) => m.id !== tempId)); const d = await res.json(); alert("Error: " + JSON.stringify(d)); setSending(false); }
+                  else { const real = await res.json(); lastSentIdsRef.current.add(real.id); setMsgs((p) => p.map((m) => m.id === tempId ? { ...real } : m)); setTimeout(() => { setSending(false); setTimeout(() => lastSentIdsRef.current.delete(real.id), 10000); }, 3000); }
+                } catch (err) { setMsgs((p) => p.filter((m) => m.id !== tempId)); alert("Error: " + String(err)); setSending(false); }
+                finally { e.target.value = ""; }
+              }}/>
+              <div className="flex-1 bg-[#2a3942] rounded-lg px-4 py-2.5"><textarea ref={inputRef} value={input} onChange={(e) => { setInput(e.target.value); e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px"; }} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }} placeholder="Type a message" rows={1} className="w-full bg-transparent text-[14px] text-white placeholder:text-white/30 focus:outline-none resize-none leading-[1.4] max-h-[120px] overflow-y-auto" style={{ height: "auto" }}/></div>
+              <button onClick={handleSend} disabled={sending || !input.trim()} className="w-10 h-10 rounded-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-20 transition flex items-center justify-center flex-shrink-0">
+                {sending ? <svg className="animate-spin" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                : <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>}
+              </button>
             </div>
           </>
         )}
