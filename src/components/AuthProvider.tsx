@@ -116,7 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   function signOut() {
-    if (!confirm("Logout karna hai?")) return;
+    if (!confirm("Are you sure you want to logout?")) return;
     setLoggingOut(true);
     setUser(null);
     // Clear all Supabase tokens from localStorage

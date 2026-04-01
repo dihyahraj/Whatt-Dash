@@ -278,7 +278,7 @@ export default function Dashboard() {
 
   // Delete chat — instant remove
   async function delChat(id: string) {
-    if (!confirm("Puri chat delete hogi! Supabase se bhi mit jayegi.")) return;
+    if (!confirm("Are you sure you want to delete this chat?")) return;
     closeMenus(); pausePoll();
     setConvos((p) => p.filter((c) => c.id !== id));
     setArchived((p) => p.filter((c) => c.id !== id));
