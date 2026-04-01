@@ -66,21 +66,22 @@ export default function Dashboard() {
   const sel = convos.find((c) => c.id === selId);
 
   // Fetch
-  const fetchConvos = useCallback(async () => { if (skipPollRef.current) return; try { const r = await fetch("/api/conversations"); const d = await r.json(); if (Array.isArray(d)) setConvos(d); } catch {} }, []);
+  const fetchConvos = useCallback(async () => { if (skipPollRef.current) return; try { const r = await fetch("/api/conversations"); if (skipPollRef.current) return; const d = await r.json(); if (skipPollRef.current) return; if (Array.isArray(d)) setConvos(d); } catch {} }, []);
   const sendingRef = useRef(false);
   const lastSentIdsRef = useRef<Set<string>>(new Set());
   const skipPollRef = useRef(false);
 
   const fetchMsgs = useCallback(async (id: string) => {
-    // Don't overwrite while sending (optimistic msg would duplicate)
-    if (sendingRef.current) return;
+    if (sendingRef.current || skipPollRef.current) return;
     try {
       const r = await fetch(`/api/conversations/${id}/messages`);
+      if (sendingRef.current || skipPollRef.current) return;
       const d = await r.json();
+      if (sendingRef.current || skipPollRef.current) return;
       if (Array.isArray(d)) setMsgs(d);
     } catch {}
   }, []);
-  const fetchArchived = useCallback(async () => { if (skipPollRef.current) return; try { const r = await fetch("/api/conversations/archived"); const d = await r.json(); if (Array.isArray(d)) setArchived(d); } catch {} }, []);
+  const fetchArchived = useCallback(async () => { if (skipPollRef.current) return; try { const r = await fetch("/api/conversations/archived"); if (skipPollRef.current) return; const d = await r.json(); if (skipPollRef.current) return; if (Array.isArray(d)) setArchived(d); } catch {} }, []);
   const fetchLabels = useCallback(async () => { try { const r = await fetch("/api/labels"); const d = await r.json(); if (Array.isArray(d)) setLabels(d); } catch {} }, []);
 
   useEffect(() => { fetchConvos(); fetchArchived(); fetchLabels(); }, [fetchConvos, fetchArchived, fetchLabels]);
@@ -110,10 +111,10 @@ export default function Dashboard() {
   // Poll 2s + always mark as read if chat open
   useEffect(() => {
     const iv = setInterval(() => {
+      if (skipPollRef.current || sendingRef.current) return; // Skip entire cycle
       fetchConvos();
       if (selId) {
         fetchMsgs(selId);
-        // Always mark read while chat is open
         fetch(`/api/conversations/${selId}/read`, { method: "POST" }).catch(() => {});
         setConvos((p) => p.map((c) => c.id === selId ? { ...c, unread_count: 0 } : c));
       }
