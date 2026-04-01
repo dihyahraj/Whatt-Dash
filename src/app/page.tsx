@@ -56,7 +56,6 @@ export default function Dashboard() {
   const [newLabelColor, setNewLabelColor] = useState("#10b981");
   const [forwardMsg, setForwardMsg] = useState<Message | null>(null);
   const [forwardSelected, setForwardSelected] = useState<Set<string>>(new Set());
-  const [deletePopup, setDeletePopup] = useState<Message | null>(null);
 
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -249,17 +248,6 @@ export default function Dashboard() {
   async function act(url: string, body?: object) { await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined }); fetchConvos(); fetchArchived(); setChatMenuId(null); setHeaderMenu(false); }
   async function delChat(id: string) { if (!confirm("Puri chat delete hogi! Supabase se bhi mit jayegi.")) return; await fetch(`/api/conversations/${id}/delete`, { method: "POST" }); if (selId === id) { setSelId(null); setMsgs([]); } fetchConvos(); fetchArchived(); setChatMenuId(null); setHeaderMenu(false); }
   async function unarchive(id: string) { await fetch(`/api/conversations/${id}/archive`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ archived: false }) }); fetchConvos(); fetchArchived(); }
-  async function delMsg(id: string, forEveryone: boolean) {
-    await fetch(`/api/messages/${id}/delete`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ deleteForEveryone: forEveryone }) });
-    if (forEveryone) {
-      // Show "deleted" placeholder for all users
-      setMsgs((p) => p.map((m) => m.id === id ? { ...m, is_deleted: true, content: "🚫 This message was deleted" } : m));
-    } else {
-      // Remove completely from view
-      setMsgs((p) => p.filter((m) => m.id !== id));
-    }
-    setDeletePopup(null); setMsgMenuId(null);
-  }
   async function starMsg(id: string, v: boolean) { await fetch(`/api/messages/${id}/star`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ starred: v }) }); setMsgs((p) => p.map((m) => m.id === id ? { ...m, is_starred: v } : m)); setMsgMenuId(null); }
   async function reactMsg(msgId: string, emoji: string) {
     if (!selId) return; const m = msgs.find((x) => x.id === msgId);
@@ -386,7 +374,7 @@ export default function Dashboard() {
 
   // Escape key
   useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === "Escape") { setReplyTo(null); setChatMenuId(null); setMsgMenuId(null); setReactPickerId(null); setShowEmoji(false); setHeaderMenu(false); setImgPreview(null); setShowChatSearch(false); setChatLabelOpen(null); setShowLabelMenu(null); setForwardMsg(null); setForwardSelected(new Set()); setDeletePopup(null); if (isRecording) cancelRecording(); } };
+    const h = (e: KeyboardEvent) => { if (e.key === "Escape") { setReplyTo(null); setChatMenuId(null); setMsgMenuId(null); setReactPickerId(null); setShowEmoji(false); setHeaderMenu(false); setImgPreview(null); setShowChatSearch(false); setChatLabelOpen(null); setShowLabelMenu(null); setForwardMsg(null); setForwardSelected(new Set()); if (isRecording) cancelRecording(); } };
     document.addEventListener("keydown", h); return () => document.removeEventListener("keydown", h);
   }, []);
 
@@ -715,10 +703,6 @@ export default function Dashboard() {
                             <MI i={msg.is_starred ? "⭐" : "☆"} l={msg.is_starred ? "Unstar" : "Star"} o={() => starMsg(msg.id, !msg.is_starred)}/>
                             <MI i="📋" l="Copy" o={() => { navigator.clipboard.writeText(msg.content); setMsgMenuId(null); }}/>
                             <MI i="↪️" l="Forward" o={() => { setForwardMsg(msg); setForwardSelected(new Set()); setMsgMenuId(null); }}/>
-                            {user?.role === "admin" && <>
-                              <div className="h-px bg-white/[0.06] my-1"/>
-                              <MI i="🗑️" l="Delete" o={() => { setDeletePopup(msg); setMsgMenuId(null); }} d/>
-                            </>}
                           </div>
                         )}
 
@@ -880,34 +864,6 @@ export default function Dashboard() {
                 </button>
               </div>
             )}
-          </div>
-        </div>
-      )}
-
-      {/* Delete Popup */}
-      {deletePopup && (
-        <div className="fixed inset-0 z-[200] bg-black/70 flex items-center justify-center" onClick={() => setDeletePopup(null)}>
-          <div className="bg-[#233138] rounded-xl border border-white/[0.08] shadow-2xl w-[320px] overflow-hidden" onClick={(e) => e.stopPropagation()}>
-            <div className="px-5 pt-5 pb-3">
-              <p className="text-[14px] text-white font-medium">Delete message?</p>
-              <p className="text-[12px] text-white/40 mt-1 truncate">&ldquo;{deletePopup.content?.substring(0, 50)}&rdquo;</p>
-            </div>
-            <div className="px-4 pb-4 flex flex-col gap-2">
-              <button onClick={() => delMsg(deletePopup.id, true)} className="w-full py-2.5 rounded-lg bg-red-500/20 text-red-400 text-[13px] font-medium hover:bg-red-500/30 transition">
-                Delete for all team members
-                <span className="block text-[10px] text-red-400/50 font-normal mt-0.5">Shows &ldquo;message deleted&rdquo; for all dashboard users</span>
-              </button>
-              <button onClick={() => delMsg(deletePopup.id, false)} className="w-full py-2.5 rounded-lg bg-white/[0.06] text-white/70 text-[13px] font-medium hover:bg-white/[0.10] transition">
-                Delete for me only
-                <span className="block text-[10px] text-white/30 font-normal mt-0.5">Removes only from your view</span>
-              </button>
-              <button onClick={() => setDeletePopup(null)} className="w-full py-2.5 rounded-lg text-white/40 text-[13px] hover:text-white/60 transition">
-                Cancel
-              </button>
-            </div>
-            <div className="px-4 pb-4 border-t border-white/[0.06] pt-3">
-              <p className="text-[10px] text-white/20 text-center">⚠️ Note: WhatsApp API does not support deleting messages from customer&apos;s phone. Delete only affects this dashboard.</p>
-            </div>
           </div>
         </div>
       )}
