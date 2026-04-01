@@ -127,6 +127,7 @@ export default function Dashboard() {
   // Notification helper
   function notifyNewMsg(msg: Message) {
     const c = convos.find((x) => x.id === msg.conversation_id);
+    if (c?.is_muted) return; // Muted chat — no notification, no sound
     const title = c?.name || c?.phone || "New Message";
     const body = msg.content?.substring(0, 100) || "New message";
     // Browser notification
