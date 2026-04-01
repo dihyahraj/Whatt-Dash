@@ -251,7 +251,13 @@ export default function Dashboard() {
   async function unarchive(id: string) { await fetch(`/api/conversations/${id}/archive`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ archived: false }) }); fetchConvos(); fetchArchived(); }
   async function delMsg(id: string, forEveryone: boolean) {
     await fetch(`/api/messages/${id}/delete`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ deleteForEveryone: forEveryone }) });
-    setMsgs((p) => p.map((m) => m.id === id ? { ...m, is_deleted: true, content: "🚫 This message was deleted" } : m));
+    if (forEveryone) {
+      // Show "deleted" placeholder for all users
+      setMsgs((p) => p.map((m) => m.id === id ? { ...m, is_deleted: true, content: "🚫 This message was deleted" } : m));
+    } else {
+      // Remove completely from view
+      setMsgs((p) => p.filter((m) => m.id !== id));
+    }
     setDeletePopup(null); setMsgMenuId(null);
   }
   async function starMsg(id: string, v: boolean) { await fetch(`/api/messages/${id}/star`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ starred: v }) }); setMsgs((p) => p.map((m) => m.id === id ? { ...m, is_starred: v } : m)); setMsgMenuId(null); }
@@ -684,12 +690,12 @@ export default function Dashboard() {
 
                         <div className={`relative px-2.5 py-1.5 ${msg.message_type === "sticker" ? "bg-transparent" : isMe ? "bg-[#005c4b] rounded-lg rounded-tr-[3px]" : "bg-[#202c33] rounded-lg rounded-tl-[3px]"} ${replied ? "rounded-t-none" : ""}`}>
                           {/* Menu button on hover — WhatsApp style */}
-                          <div className={`absolute right-0 top-0 opacity-0 group-hover/m:opacity-100 z-10`}>
+                          {!msg.is_deleted && <div className={`absolute right-0 top-0 opacity-0 group-hover/m:opacity-100 z-10`}>
                             <button onClick={(e) => { e.stopPropagation(); setMsgMenuId(msgMenuId === msg.id ? null : msg.id); setChatMenuId(null); setHeaderMenu(false); }}
                               className={`w-7 h-7 rounded-bl-lg flex items-center justify-center ${isMe ? "bg-[#005c4b] hover:bg-[#04705b]" : "bg-[#202c33] hover:bg-[#28353d]"}`}>
                               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeOpacity="0.6"><path d="M6 9l6 6 6-6"/></svg>
                             </button>
-                          </div>
+                          </div>}
 
                           {media(msg)}
                           <div className="flex items-center justify-end gap-0.5 mt-0.5">
@@ -884,16 +890,16 @@ export default function Dashboard() {
           <div className="bg-[#233138] rounded-xl border border-white/[0.08] shadow-2xl w-[300px] overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="px-5 pt-5 pb-3">
               <p className="text-[14px] text-white font-medium">Delete message?</p>
-              <p className="text-[12px] text-white/40 mt-1 truncate">{deletePopup.content?.substring(0, 60)}</p>
+              <p className="text-[12px] text-white/40 mt-1 truncate">&ldquo;{deletePopup.content?.substring(0, 50)}&rdquo;</p>
             </div>
             <div className="px-4 pb-4 flex flex-col gap-2">
-              {deletePopup.role === "assistant" && (
-                <button onClick={() => delMsg(deletePopup.id, true)} className="w-full py-2.5 rounded-lg bg-red-500/20 text-red-400 text-[13px] font-medium hover:bg-red-500/30 transition">
-                  Delete for everyone
-                </button>
-              )}
+              <button onClick={() => delMsg(deletePopup.id, true)} className="w-full py-2.5 rounded-lg bg-red-500/20 text-red-400 text-[13px] font-medium hover:bg-red-500/30 transition">
+                Delete for everyone
+                <span className="block text-[10px] text-red-400/50 font-normal mt-0.5">All dashboard users will see &ldquo;message deleted&rdquo;</span>
+              </button>
               <button onClick={() => delMsg(deletePopup.id, false)} className="w-full py-2.5 rounded-lg bg-white/[0.06] text-white/70 text-[13px] font-medium hover:bg-white/[0.10] transition">
                 Delete for me
+                <span className="block text-[10px] text-white/30 font-normal mt-0.5">Only removes from your view</span>
               </button>
               <button onClick={() => setDeletePopup(null)} className="w-full py-2.5 rounded-lg text-white/40 text-[13px] hover:text-white/60 transition">
                 Cancel
