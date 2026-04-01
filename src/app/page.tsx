@@ -239,34 +239,105 @@ export default function Dashboard() {
   }
 
   // Chat actions
-  async function act(url: string, body?: object) { await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined }); fetchConvos(); fetchArchived(); setChatMenuId(null); setHeaderMenu(false); }
-  async function delChat(id: string) { if (!confirm("Puri chat delete hogi! Supabase se bhi mit jayegi.")) return; await fetch(`/api/conversations/${id}/delete`, { method: "POST" }); if (selId === id) { setSelId(null); setMsgs([]); } fetchConvos(); fetchArchived(); setChatMenuId(null); setHeaderMenu(false); }
-  async function unarchive(id: string) { await fetch(`/api/conversations/${id}/archive`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ archived: false }) }); fetchConvos(); fetchArchived(); }
-  async function starMsg(id: string, v: boolean) { await fetch(`/api/messages/${id}/star`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ starred: v }) }); setMsgs((p) => p.map((m) => m.id === id ? { ...m, is_starred: v } : m)); setMsgMenuId(null); }
-  async function reactMsg(msgId: string, emoji: string) {
-    if (!selId) return; const m = msgs.find((x) => x.id === msgId);
-    // If same emoji, remove reaction (send empty string)
-    const newEmoji = m?.reaction === emoji ? "" : emoji;
-    await fetch(`/api/conversations/${selId}/react`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messageId: msgId, emoji: newEmoji, whatsappMsgId: m?.whatsapp_msg_id || null }) });
-    setMsgs((p) => p.map((x) => x.id === msgId ? { ...x, reaction: newEmoji || null } : x)); setReactPickerId(null);
+  // ═══ OPTIMISTIC ACTIONS — UI updates instantly, backend in background ═══
+  
+  function closeMenus() { setChatMenuId(null); setHeaderMenu(false); setMsgMenuId(null); }
+
+  // Pin / Mute / Mark unread — update convos instantly
+  async function act(url: string, body?: object) {
+    closeMenus();
+    // Optimistic update based on URL + body
+    if (body && typeof body === "object") {
+      const b = body as Record<string, unknown>;
+      setConvos((p) => p.map((c) => {
+        const cid = url.match(/conversations\/([^/]+)\//)?.[1];
+        if (c.id !== cid) return c;
+        if ("pinned" in b) return { ...c, is_pinned: !!b.pinned };
+        if ("muted" in b) return { ...c, is_muted: !!b.muted };
+        if ("unread_count" in b) return { ...c, unread_count: b.unread_count as number };
+        if ("archived" in b && b.archived) return c; // handled below
+        return c;
+      }));
+      // Archive: remove from convos instantly
+      if ("archived" in b && b.archived) {
+        const cid = url.match(/conversations\/([^/]+)\//)?.[1];
+        setConvos((p) => p.filter((c) => c.id !== cid));
+        if (selId === cid) { setSelId(null); setMsgs([]); }
+      }
+    }
+    // Background
+    try { await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined }); }
+    catch {} finally { fetchConvos(); fetchArchived(); }
   }
 
-  // Label actions
+  // Delete chat — instant remove
+  async function delChat(id: string) {
+    if (!confirm("Puri chat delete hogi! Supabase se bhi mit jayegi.")) return;
+    closeMenus();
+    const backup = [...convos];
+    setConvos((p) => p.filter((c) => c.id !== id));
+    if (selId === id) { setSelId(null); setMsgs([]); }
+    try { await fetch(`/api/conversations/${id}/delete`, { method: "POST" }); }
+    catch { setConvos(backup); } finally { fetchConvos(); fetchArchived(); }
+  }
+
+  // Unarchive — instant move
+  async function unarchive(id: string) {
+    setArchived((p) => p.filter((c) => c.id !== id));
+    try { await fetch(`/api/conversations/${id}/archive`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ archived: false }) }); }
+    catch {} finally { fetchConvos(); fetchArchived(); }
+  }
+
+  // Star message — instant toggle
+  async function starMsg(id: string, v: boolean) {
+    setMsgs((p) => p.map((m) => m.id === id ? { ...m, is_starred: v } : m)); setMsgMenuId(null);
+    try { await fetch(`/api/messages/${id}/star`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ starred: v }) }); }
+    catch { setMsgs((p) => p.map((m) => m.id === id ? { ...m, is_starred: !v } : m)); }
+  }
+
+  // React — instant emoji
+  async function reactMsg(msgId: string, emoji: string) {
+    if (!selId) return;
+    const m = msgs.find((x) => x.id === msgId);
+    const oldEmoji = m?.reaction;
+    const newEmoji = m?.reaction === emoji ? "" : emoji;
+    setMsgs((p) => p.map((x) => x.id === msgId ? { ...x, reaction: newEmoji || null } : x)); setReactPickerId(null);
+    try { await fetch(`/api/conversations/${selId}/react`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messageId: msgId, emoji: newEmoji, whatsappMsgId: m?.whatsapp_msg_id || null }) }); }
+    catch { setMsgs((p) => p.map((x) => x.id === msgId ? { ...x, reaction: oldEmoji || null } : x)); }
+  }
+
+  // Label actions — instant
   async function createLabel() {
     if (!newLabelName.trim()) return;
-    await fetch("/api/labels", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: newLabelName.trim(), color: newLabelColor }) });
-    setNewLabelName(""); fetchLabels();
+    const tempLabel = { id: `temp_${Date.now()}`, name: newLabelName.trim(), color: newLabelColor };
+    setLabels((p) => [...p, tempLabel]);
+    setNewLabelName("");
+    try { await fetch("/api/labels", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: tempLabel.name, color: tempLabel.color }) }); }
+    catch {} finally { fetchLabels(); }
   }
   async function deleteLabel(id: string) {
     if (!confirm("Delete this label?")) return;
-    await fetch(`/api/labels/${id}`, { method: "DELETE" }); fetchLabels(); fetchConvos();
+    const backup = [...labels];
+    setLabels((p) => p.filter((l) => l.id !== id));
+    try { await fetch(`/api/labels/${id}`, { method: "DELETE" }); }
+    catch { setLabels(backup); } finally { fetchLabels(); fetchConvos(); }
   }
   async function toggleLabel(convoId: string, labelId: string, has: boolean) {
-    await fetch(`/api/conversations/${convoId}/labels`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label_id: labelId, action: has ? "remove" : "add" }) });
-    fetchConvos(); setShowLabelMenu(null);
+    // Instant toggle in convos list
+    const label = labels.find((l) => l.id === labelId);
+    if (label) {
+      setConvos((p) => p.map((c) => {
+        if (c.id !== convoId) return c;
+        const newLabels = has ? c.labels.filter((l) => l.id !== labelId) : [...c.labels, label];
+        return { ...c, labels: newLabels };
+      }));
+    }
+    setShowLabelMenu(null);
+    try { await fetch(`/api/conversations/${convoId}/labels`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label_id: labelId, action: has ? "remove" : "add" }) }); }
+    catch {} finally { fetchConvos(); }
   }
 
-  // Forward message to another conversation
+  // Forward — show sending state
   async function forwardMessage(msgId: string, targetIds: string[]) {
     if (targetIds.length === 0) return;
     await fetch(`/api/messages/${msgId}/forward`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ targetConversationIds: targetIds }) });
