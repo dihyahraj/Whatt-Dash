@@ -101,28 +101,31 @@ export async function POST(
       // Send using uploaded media ID (most reliable)
       waPayload = {
         messaging_product: "whatsapp",
+        recipient_type: "individual",
         to: convo.phone,
         type: waType,
         [waType]: waType === "document"
           ? { id: waMediaId, filename: file.name, ...(caption ? { caption } : {}) }
           : waType === "audio"
-            ? { id: waMediaId }
+            ? { id: waMediaId, ...(isVoice ? { voice: true } : {}) }
             : { id: waMediaId, ...(caption ? { caption } : {}) },
       };
     } else {
       // Fallback: send using public link
       waPayload = {
         messaging_product: "whatsapp",
+        recipient_type: "individual",
         to: convo.phone,
         type: waType,
         [waType]: waType === "document"
           ? { link: publicUrl, filename: file.name, ...(caption ? { caption } : {}) }
           : waType === "audio"
-            ? { link: publicUrl }
+            ? { link: publicUrl, ...(isVoice ? { voice: true } : {}) }
             : { link: publicUrl, ...(caption ? { caption } : {}) },
       };
     }
 
+    console.log("WhatsApp send payload:", JSON.stringify(waPayload, null, 2));
     const waRes = await fetch(`${GRAPH_API}/${phoneId}/messages`, {
       method: "POST",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
@@ -131,8 +134,9 @@ export async function POST(
     const waData = await waRes.json();
 
     if (waData.error) {
-      console.error("WhatsApp send error:", waData.error);
-      return Response.json({ error: "WhatsApp: " + (waData.error.message || JSON.stringify(waData.error)) }, { status: 400 });
+      console.error("WhatsApp send error:", JSON.stringify(waData.error));
+      console.error("Full WA response:", JSON.stringify(waData));
+      return Response.json({ error: "WhatsApp: " + (waData.error?.error_data?.details || waData.error.message || JSON.stringify(waData.error)) }, { status: 400 });
     }
 
     const waMsgId = waData.messages?.[0]?.id || null;
