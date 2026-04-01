@@ -887,23 +887,26 @@ export default function Dashboard() {
       {/* Delete Popup */}
       {deletePopup && (
         <div className="fixed inset-0 z-[200] bg-black/70 flex items-center justify-center" onClick={() => setDeletePopup(null)}>
-          <div className="bg-[#233138] rounded-xl border border-white/[0.08] shadow-2xl w-[300px] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-[#233138] rounded-xl border border-white/[0.08] shadow-2xl w-[320px] overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="px-5 pt-5 pb-3">
               <p className="text-[14px] text-white font-medium">Delete message?</p>
               <p className="text-[12px] text-white/40 mt-1 truncate">&ldquo;{deletePopup.content?.substring(0, 50)}&rdquo;</p>
             </div>
             <div className="px-4 pb-4 flex flex-col gap-2">
               <button onClick={() => delMsg(deletePopup.id, true)} className="w-full py-2.5 rounded-lg bg-red-500/20 text-red-400 text-[13px] font-medium hover:bg-red-500/30 transition">
-                Delete for everyone
-                <span className="block text-[10px] text-red-400/50 font-normal mt-0.5">All dashboard users will see &ldquo;message deleted&rdquo;</span>
+                Delete for all team members
+                <span className="block text-[10px] text-red-400/50 font-normal mt-0.5">Shows &ldquo;message deleted&rdquo; for all dashboard users</span>
               </button>
               <button onClick={() => delMsg(deletePopup.id, false)} className="w-full py-2.5 rounded-lg bg-white/[0.06] text-white/70 text-[13px] font-medium hover:bg-white/[0.10] transition">
-                Delete for me
-                <span className="block text-[10px] text-white/30 font-normal mt-0.5">Only removes from your view</span>
+                Delete for me only
+                <span className="block text-[10px] text-white/30 font-normal mt-0.5">Removes only from your view</span>
               </button>
               <button onClick={() => setDeletePopup(null)} className="w-full py-2.5 rounded-lg text-white/40 text-[13px] hover:text-white/60 transition">
                 Cancel
               </button>
+            </div>
+            <div className="px-4 pb-4 border-t border-white/[0.06] pt-3">
+              <p className="text-[10px] text-white/20 text-center">⚠️ Note: WhatsApp API does not support deleting messages from customer&apos;s phone. Delete only affects this dashboard.</p>
             </div>
           </div>
         </div>
