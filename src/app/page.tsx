@@ -696,15 +696,18 @@ export default function Dashboard() {
                         {msg.reaction && <div className={`absolute -bottom-2.5 ${isMe ? "right-2" : "left-2"} bg-[#182229] border border-white/[0.08] rounded-full px-1.5 py-0.5 text-[12px] shadow cursor-pointer hover:scale-110 transition group/react`} onClick={(e) => { e.stopPropagation(); reactMsg(msg.id, msg.reaction!); }} title="Click to remove">{msg.reaction}<span className="hidden group-hover/react:inline text-[9px] ml-0.5 text-white/30">✕</span></div>}
 
                         {/* Msg menu */}
-                        {msgMenuId === msg.id && (
-                          <div className={`absolute ${isMe ? "right-0" : "left-0"} top-8 z-[100] bg-[#233138] rounded-xl shadow-2xl py-1.5 min-w-[170px] border border-white/[0.1]`} onClick={(e) => e.stopPropagation()}>
+                        {msgMenuId === msg.id && (() => {
+                          const isNearBottom = i >= displayMsgs.length - 3;
+                          return (
+                          <div className={`absolute ${isMe ? "right-0" : "left-0"} ${isNearBottom ? "bottom-8" : "top-8"} z-[100] bg-[#233138] rounded-xl shadow-2xl py-1.5 min-w-[170px] border border-white/[0.1]`} onClick={(e) => e.stopPropagation()}>
                             <MI i="↩️" l="Reply" o={() => { setReplyTo(msg); setMsgMenuId(null); inputRef.current?.focus(); }}/>
                             <MI i="😀" l="React" o={() => { setReactPickerId(msg.id); setMsgMenuId(null); }}/>
                             <MI i={msg.is_starred ? "⭐" : "☆"} l={msg.is_starred ? "Unstar" : "Star"} o={() => starMsg(msg.id, !msg.is_starred)}/>
                             <MI i="📋" l="Copy" o={() => { navigator.clipboard.writeText(msg.content); setMsgMenuId(null); }}/>
                             <MI i="↪️" l="Forward" o={() => { setForwardMsg(msg); setForwardSelected(new Set()); setMsgMenuId(null); }}/>
                           </div>
-                        )}
+                          );
+                        })()}
 
                         {reactPickerId === msg.id && (
                           <div className={`absolute ${isMe ? "right-0" : "left-0"} -top-12 z-[100] bg-[#233138] border border-white/[0.1] rounded-full px-2 py-1.5 flex gap-0.5 shadow-2xl`} onClick={(e) => e.stopPropagation()}>
