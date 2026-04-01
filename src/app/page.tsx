@@ -258,13 +258,11 @@ export default function Dashboard() {
       const cid = url.match(/conversations\/([^/]+)\//)?.[1];
       
       if ("archived" in b && b.archived) {
-        // Archive: move from convos → archived
         const chat = convos.find((c) => c.id === cid);
         setConvos((p) => p.filter((c) => c.id !== cid));
         if (chat) setArchived((p) => [{ ...chat, is_archived: true }, ...p]);
         if (selId === cid) { setSelId(null); setMsgs([]); }
       } else {
-        // Pin/Mute/Unread
         setConvos((p) => p.map((c) => {
           if (c.id !== cid) return c;
           if ("pinned" in b) return { ...c, is_pinned: !!b.pinned };
@@ -274,10 +272,7 @@ export default function Dashboard() {
         }));
       }
     }
-    // Fire request, then refresh after server completes
-    fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined })
-      .then(() => { skipPollRef.current = false; fetchConvos(); fetchArchived(); })
-      .catch(() => { skipPollRef.current = false; fetchConvos(); fetchArchived(); });
+    fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined }).catch(() => {});
   }
 
   // Delete chat — instant remove
@@ -287,9 +282,7 @@ export default function Dashboard() {
     setConvos((p) => p.filter((c) => c.id !== id));
     setArchived((p) => p.filter((c) => c.id !== id));
     if (selId === id) { setSelId(null); setMsgs([]); }
-    fetch(`/api/conversations/${id}/delete`, { method: "POST" })
-      .then(() => { skipPollRef.current = false; fetchConvos(); fetchArchived(); })
-      .catch(() => { skipPollRef.current = false; fetchConvos(); fetchArchived(); });
+    fetch(`/api/conversations/${id}/delete`, { method: "POST" }).catch(() => {});
   }
 
   // Unarchive — instant move
@@ -298,9 +291,7 @@ export default function Dashboard() {
     const chat = archived.find((c) => c.id === id);
     setArchived((p) => p.filter((c) => c.id !== id));
     if (chat) setConvos((p) => [{ ...chat, is_archived: false }, ...p]);
-    fetch(`/api/conversations/${id}/archive`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ archived: false }) })
-      .then(() => { skipPollRef.current = false; fetchConvos(); fetchArchived(); })
-      .catch(() => { skipPollRef.current = false; fetchConvos(); fetchArchived(); });
+    fetch(`/api/conversations/${id}/archive`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ archived: false }) }).catch(() => {});
   }
 
   // Star message — instant toggle
