@@ -69,6 +69,7 @@ export default function Dashboard() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+  const recMimeRef = useRef<string>("audio/webm");
   const sel = convos.find((c) => c.id === selId);
 
   // Fetch
@@ -295,7 +296,12 @@ export default function Dashboard() {
   async function startRecording() {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mr = new MediaRecorder(stream, { mimeType: MediaRecorder.isTypeSupported("audio/webm;codecs=opus") ? "audio/webm;codecs=opus" : "audio/webm" });
+      // Try ogg first (WhatsApp native), then webm, then mp4
+      const mimeOptions = ["audio/ogg;codecs=opus", "audio/ogg", "audio/mp4", "audio/webm;codecs=opus", "audio/webm"];
+      const recMime = mimeOptions.find((m) => MediaRecorder.isTypeSupported(m)) || "";
+      console.log("Recording with mime:", recMime || "default");
+      const mr = new MediaRecorder(stream, recMime ? { mimeType: recMime } : {});
+      recMimeRef.current = recMime || mr.mimeType || "audio/webm";
       chunksRef.current = [];
       mr.ondataavailable = (e) => { if (e.data.size > 0) chunksRef.current.push(e.data); };
       mr.onstop = () => { stream.getTracks().forEach((t) => t.stop()); };
@@ -334,7 +340,9 @@ export default function Dashboard() {
     setIsRecording(false);
     setRecordingTime(0);
 
-    const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+    const actualMime = recMimeRef.current;
+    const ext = actualMime.includes("ogg") ? "ogg" : actualMime.includes("mp4") ? "m4a" : "webm";
+    const blob = new Blob(chunksRef.current, { type: actualMime });
     if (blob.size === 0) return;
 
     // Optimistic: show sending indicator
@@ -343,7 +351,7 @@ export default function Dashboard() {
 
     setSending(true);
     try {
-      const file = new File([blob], `voice_${Date.now()}.webm`, { type: "audio/webm" });
+      const file = new File([blob], `voice_${Date.now()}.${ext}`, { type: actualMime });
       const fd = new FormData();
       fd.append("file", file);
       fd.append("caption", "");
