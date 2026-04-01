@@ -56,7 +56,7 @@ export default function Dashboard() {
   const [newLabelColor, setNewLabelColor] = useState("#10b981");
 
   const endRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const chatBoxRef = useRef<HTMLDivElement>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [hasNewMsg, setHasNewMsg] = useState(false);
@@ -209,6 +209,7 @@ export default function Dashboard() {
     };
     setMsgs((p) => [...p, optimisticMsg]);
     setInput(""); setReplyTo(null);
+    if (inputRef.current) inputRef.current.style.height = "auto";
     setIsAtBottom(true); // auto-scroll for own messages
     
     setSending(true);
@@ -727,7 +728,7 @@ export default function Dashboard() {
             )}
 
             {/* Input */}
-            <div className="px-4 sm:px-12 py-2 flex items-center gap-2" style={{ background: "#202c33" }}>
+            <div className="px-4 sm:px-12 py-2 flex items-end gap-2" style={{ background: "#202c33" }}>
               {isRecording ? (
                 /* ── Recording UI ── */
                 <>
@@ -767,7 +768,7 @@ export default function Dashboard() {
                     } catch (err) { setMsgs((p) => p.filter((m) => m.id !== tempId)); alert("Error: " + String(err)); setSending(false); }
                     finally { e.target.value = ""; }
                   }}/>
-                  <div className="flex-1 bg-[#2a3942] rounded-lg px-4 py-2.5"><input ref={inputRef} type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) handleSend(); }} placeholder="Type a message" className="w-full bg-transparent text-[14px] text-white placeholder:text-white/30 focus:outline-none"/></div>
+                  <div className="flex-1 bg-[#2a3942] rounded-lg px-4 py-2.5"><textarea ref={inputRef} value={input} onChange={(e) => { setInput(e.target.value); e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px"; }} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }} placeholder="Type a message" rows={1} className="w-full bg-transparent text-[14px] text-white placeholder:text-white/30 focus:outline-none resize-none leading-[1.4] max-h-[120px] overflow-y-auto" style={{ height: "auto" }}/></div>
                   {input.trim() ? (
                     <button onClick={handleSend} disabled={sending} className="w-10 h-10 rounded-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-20 transition flex items-center justify-center flex-shrink-0">
                       {sending ? <svg className="animate-spin" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
