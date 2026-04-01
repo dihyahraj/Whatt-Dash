@@ -64,20 +64,22 @@ export async function POST(
 
     // 2. Determine type
     const isVoice = file.name.includes("voice_");
+    const isWebm = file.type.includes("webm");
     let waType = "document";
-    let waMime = file.type;
     if (file.type.startsWith("image/")) waType = "image";
     else if (file.type.startsWith("video/")) waType = "video";
-    else if (file.type.startsWith("audio/") && !file.type.includes("webm") && !isVoice) waType = "audio";
-    // Voice notes: keep as document type (browser webm → WhatsApp can't play as voice)
-    // Non-webm audio (aac, mp3, ogg): send as audio type
+    else if (isVoice && !isWebm) waType = "audio"; // m4a/mp4 voice → WhatsApp supports it!
+    else if (!isVoice && file.type.startsWith("audio/") && !isWebm) waType = "audio";
+    // webm voice stays as document (WhatsApp doesn't support webm)
 
-    // 3. Upload to WhatsApp Media API (skip for voice — use public URL directly)
+    console.log(`File: ${file.name}, type: ${file.type}, isVoice: ${isVoice}, isWebm: ${isWebm}, waType: ${waType}`);
+
+    // 3. Upload to WhatsApp Media API (skip only for webm voice)
     let waMediaId: string | null = null;
-    if (!isVoice) {
-      waMediaId = await uploadToWhatsApp(arrayBuffer, waMime, file.name);
+    if (!(isVoice && isWebm)) {
+      waMediaId = await uploadToWhatsApp(arrayBuffer, file.type, file.name);
     } else {
-      console.log("Voice note: skipping Media API upload, using Supabase public URL as document");
+      console.log("Voice is webm: skipping Media API, using public URL as document");
     }
 
     // 4. Send message
@@ -96,7 +98,7 @@ export async function POST(
         [waType]: waType === "document"
           ? { id: waMediaId, filename: file.name, ...(caption ? { caption } : {}) }
           : waType === "audio"
-            ? { id: waMediaId, ...(isVoice ? { voice: true } : {}) }
+            ? { id: waMediaId }
             : { id: waMediaId, ...(caption ? { caption } : {}) },
       };
     } else {
@@ -109,7 +111,7 @@ export async function POST(
         [waType]: waType === "document"
           ? { link: publicUrl, filename: file.name, ...(caption ? { caption } : {}) }
           : waType === "audio"
-            ? { link: publicUrl, ...(isVoice ? { voice: true } : {}) }
+            ? { link: publicUrl }
             : { link: publicUrl, ...(caption ? { caption } : {}) },
       };
     }
