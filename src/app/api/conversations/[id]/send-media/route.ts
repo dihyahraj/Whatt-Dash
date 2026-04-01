@@ -8,6 +8,8 @@ async function uploadToWhatsApp(fileArrayBuffer: ArrayBuffer, mimeType: string, 
   const token = process.env.WHATSAPP_ACCESS_TOKEN;
   const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
   
+  console.log(`Uploading to WhatsApp: ${filename} (${mimeType}, ${fileArrayBuffer.byteLength} bytes)`);
+  
   const formData = new FormData();
   formData.append("messaging_product", "whatsapp");
   formData.append("file", new Blob([fileArrayBuffer], { type: mimeType }), filename);
@@ -20,9 +22,10 @@ async function uploadToWhatsApp(fileArrayBuffer: ArrayBuffer, mimeType: string, 
   });
   const data = await res.json();
   if (data.error) {
-    console.error("WhatsApp media upload error:", data.error);
+    console.error("WhatsApp media upload error:", JSON.stringify(data.error));
     return null;
   }
+  console.log("WhatsApp media uploaded, ID:", data.id);
   return data.id || null;
 }
 
@@ -62,17 +65,35 @@ export async function POST(
     const isVoice = file.name.includes("voice_");
     let waType = "document";
     let waMime = file.type;
+    let waFilename = file.name;
     if (file.type.startsWith("image/")) waType = "image";
     else if (file.type.startsWith("video/")) waType = "video";
-    else if (isVoice || file.type.startsWith("audio/")) { waType = "audio"; waMime = file.type; }
+    else if (isVoice) {
+      // Voice note: tell WhatsApp it's ogg/opus (same opus codec, WhatsApp might accept)
+      waType = "audio";
+      waMime = "audio/ogg; codecs=opus";
+      waFilename = file.name.replace(".webm", ".ogg");
+    }
+    else if (file.type.startsWith("audio/") && !file.type.includes("webm")) { waType = "audio"; }
 
-    // 3. Upload to WhatsApp Media API first (they handle format validation)
-    const token = process.env.WHATSAPP_ACCESS_TOKEN;
-    const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
+    // 3. Upload to WhatsApp Media API
+    let waMediaId = await uploadToWhatsApp(arrayBuffer, waMime, waFilename);
     
-    const waMediaId = await uploadToWhatsApp(arrayBuffer, waMime, file.name);
+    // If voice upload as ogg failed, try original webm format
+    if (!waMediaId && isVoice) {
+      console.log("Retrying voice upload with original webm format...");
+      waMediaId = await uploadToWhatsApp(arrayBuffer, file.type, file.name);
+    }
+    
+    // If still no media ID for voice, fall back to document type
+    if (!waMediaId && isVoice) {
+      console.log("Voice upload failed, falling back to document type");
+      waType = "document";
+    }
 
     // 4. Send message
+    const token = process.env.WHATSAPP_ACCESS_TOKEN;
+    const phoneId = process.env.WHATSAPP_PHONE_NUMBER_ID;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let waPayload: any;
 
