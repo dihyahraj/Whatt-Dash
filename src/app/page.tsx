@@ -54,7 +54,9 @@ export default function Dashboard() {
   const [chatLabelOpen, setChatLabelOpen] = useState<string | null>(null); // sidebar menu labels
   const [newLabelName, setNewLabelName] = useState("");
   const [newLabelColor, setNewLabelColor] = useState("#10b981");
-  const [forwardMsg, setForwardMsg] = useState<Message | null>(null); // message to forward
+  const [forwardMsg, setForwardMsg] = useState<Message | null>(null);
+  const [forwardSelected, setForwardSelected] = useState<Set<string>>(new Set());
+  const [deletePopup, setDeletePopup] = useState<Message | null>(null);
 
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -247,7 +249,11 @@ export default function Dashboard() {
   async function act(url: string, body?: object) { await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined }); fetchConvos(); fetchArchived(); setChatMenuId(null); setHeaderMenu(false); }
   async function delChat(id: string) { if (!confirm("Puri chat delete hogi! Supabase se bhi mit jayegi.")) return; await fetch(`/api/conversations/${id}/delete`, { method: "POST" }); if (selId === id) { setSelId(null); setMsgs([]); } fetchConvos(); fetchArchived(); setChatMenuId(null); setHeaderMenu(false); }
   async function unarchive(id: string) { await fetch(`/api/conversations/${id}/archive`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ archived: false }) }); fetchConvos(); fetchArchived(); }
-  async function delMsg(id: string) { await fetch(`/api/messages/${id}/delete`, { method: "POST" }); setMsgs((p) => p.map((m) => m.id === id ? { ...m, is_deleted: true, content: "🚫 This message was deleted" } : m)); setMsgMenuId(null); }
+  async function delMsg(id: string, forEveryone: boolean) {
+    await fetch(`/api/messages/${id}/delete`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ deleteForEveryone: forEveryone }) });
+    setMsgs((p) => p.map((m) => m.id === id ? { ...m, is_deleted: true, content: "🚫 This message was deleted" } : m));
+    setDeletePopup(null); setMsgMenuId(null);
+  }
   async function starMsg(id: string, v: boolean) { await fetch(`/api/messages/${id}/star`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ starred: v }) }); setMsgs((p) => p.map((m) => m.id === id ? { ...m, is_starred: v } : m)); setMsgMenuId(null); }
   async function reactMsg(msgId: string, emoji: string) {
     if (!selId) return; const m = msgs.find((x) => x.id === msgId);
@@ -273,9 +279,11 @@ export default function Dashboard() {
   }
 
   // Forward message to another conversation
-  async function forwardMessage(msgId: string, targetConvoId: string) {
-    await fetch(`/api/messages/${msgId}/forward`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ targetConversationId: targetConvoId }) });
+  async function forwardMessage(msgId: string, targetIds: string[]) {
+    if (targetIds.length === 0) return;
+    await fetch(`/api/messages/${msgId}/forward`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ targetConversationIds: targetIds }) });
     setForwardMsg(null);
+    setForwardSelected(new Set());
     fetchConvos();
   }
 
@@ -372,7 +380,7 @@ export default function Dashboard() {
 
   // Escape key
   useEffect(() => {
-    const h = (e: KeyboardEvent) => { if (e.key === "Escape") { setReplyTo(null); setChatMenuId(null); setMsgMenuId(null); setReactPickerId(null); setShowEmoji(false); setHeaderMenu(false); setImgPreview(null); setShowChatSearch(false); setChatLabelOpen(null); setShowLabelMenu(null); setForwardMsg(null); if (isRecording) cancelRecording(); } };
+    const h = (e: KeyboardEvent) => { if (e.key === "Escape") { setReplyTo(null); setChatMenuId(null); setMsgMenuId(null); setReactPickerId(null); setShowEmoji(false); setHeaderMenu(false); setImgPreview(null); setShowChatSearch(false); setChatLabelOpen(null); setShowLabelMenu(null); setForwardMsg(null); setForwardSelected(new Set()); setDeletePopup(null); if (isRecording) cancelRecording(); } };
     document.addEventListener("keydown", h); return () => document.removeEventListener("keydown", h);
   }, []);
 
@@ -700,10 +708,10 @@ export default function Dashboard() {
                             <MI i="😀" l="React" o={() => { setReactPickerId(msg.id); setMsgMenuId(null); }}/>
                             <MI i={msg.is_starred ? "⭐" : "☆"} l={msg.is_starred ? "Unstar" : "Star"} o={() => starMsg(msg.id, !msg.is_starred)}/>
                             <MI i="📋" l="Copy" o={() => { navigator.clipboard.writeText(msg.content); setMsgMenuId(null); }}/>
-                            <MI i="↪️" l="Forward" o={() => { setForwardMsg(msg); setMsgMenuId(null); }}/>
+                            <MI i="↪️" l="Forward" o={() => { setForwardMsg(msg); setForwardSelected(new Set()); setMsgMenuId(null); }}/>
                             {user?.role === "admin" && <>
                               <div className="h-px bg-white/[0.06] my-1"/>
-                              <MI i="🗑️" l="Delete" o={() => delMsg(msg.id)} d/>
+                              <MI i="🗑️" l="Delete" o={() => { setDeletePopup(msg); setMsgMenuId(null); }} d/>
                             </>}
                           </div>
                         )}
@@ -815,33 +823,81 @@ export default function Dashboard() {
       {/* Image Preview */}
       {imgPreview && <div className="fixed inset-0 z-[200] bg-black/95 flex items-center justify-center" onClick={() => setImgPreview(null)}><button className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-white text-xl">✕</button><img src={imgPreview} alt="" className="max-w-[90vw] max-h-[90vh] object-contain" onClick={(e) => e.stopPropagation()}/></div>}
 
-      {/* Forward Modal */}
+      {/* Forward Modal — multi-select */}
       {forwardMsg && (
-        <div className="fixed inset-0 z-[200] bg-black/70 flex items-center justify-center" onClick={() => setForwardMsg(null)}>
-          <div className="bg-[#111b21] rounded-xl border border-white/[0.08] shadow-2xl w-[340px] max-h-[500px] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[200] bg-black/70 flex items-center justify-center" onClick={() => { setForwardMsg(null); setForwardSelected(new Set()); }}>
+          <div className="bg-[#111b21] rounded-xl border border-white/[0.08] shadow-2xl w-[360px] max-h-[520px] overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="px-4 py-3 border-b border-white/[0.06] flex items-center justify-between">
-              <h3 className="text-[14px] font-semibold text-white">Forward message to</h3>
-              <button onClick={() => setForwardMsg(null)} className="text-white/30 hover:text-white/60 text-lg">✕</button>
+              <h3 className="text-[14px] font-semibold text-white">Forward to</h3>
+              <button onClick={() => { setForwardMsg(null); setForwardSelected(new Set()); }} className="text-white/30 hover:text-white/60 text-lg">✕</button>
             </div>
             <div className="px-3 py-2 border-b border-white/[0.06]">
               <div className="bg-[#202c33] rounded-lg px-3 py-1.5 text-[12px] text-white/50 truncate">
-                ↪️ {forwardMsg.content?.substring(0, 80)}{(forwardMsg.content?.length || 0) > 80 ? "..." : ""}
+                {forwardMsg.content?.substring(0, 100)}
               </div>
             </div>
-            <div className="overflow-y-auto max-h-[380px]">
-              {convos.filter((c) => c.id !== forwardMsg.conversation_id).map((c) => (
-                <button key={c.id} onClick={() => forwardMessage(forwardMsg.id, c.id)} className="w-full flex items-center gap-3 px-4 py-3 hover:bg-white/[0.04] text-left">
-                  <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${aclr(c.id)} flex items-center justify-center text-white text-[12px] font-bold flex-shrink-0`}>{ini(c.name, c.phone)}</div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[13px] text-white font-medium truncate">{c.name || c.phone}</p>
-                    <p className="text-[11px] text-white/35 font-mono">{c.phone}</p>
-                  </div>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="2"><path d="M5 12h14"/><path d="M12 5l7 7-7 7"/></svg>
+            {forwardSelected.size > 0 && (
+              <div className="px-3 py-2 border-b border-white/[0.06] flex items-center gap-2 flex-wrap">
+                {Array.from(forwardSelected).map((id) => { const c = convos.find((x) => x.id === id); return c ? (
+                  <span key={id} className="bg-emerald-500/20 text-emerald-400 text-[11px] px-2 py-0.5 rounded-full flex items-center gap-1">
+                    {c.name || c.phone}
+                    <button onClick={() => { const s = new Set(forwardSelected); s.delete(id); setForwardSelected(s); }} className="hover:text-white">✕</button>
+                  </span>
+                ) : null; })}
+              </div>
+            )}
+            <div className="overflow-y-auto max-h-[320px]">
+              {convos.filter((c) => c.id !== forwardMsg.conversation_id).map((c) => {
+                const isSelected = forwardSelected.has(c.id);
+                return (
+                  <button key={c.id} onClick={() => {
+                    const s = new Set(forwardSelected);
+                    if (isSelected) s.delete(c.id); else s.add(c.id);
+                    setForwardSelected(s);
+                  }} className={`w-full flex items-center gap-3 px-4 py-2.5 text-left ${isSelected ? "bg-emerald-500/10" : "hover:bg-white/[0.04]"}`}>
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${isSelected ? "bg-emerald-500 border-emerald-500" : "border-white/20"}`}>
+                      {isSelected && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
+                    </div>
+                    <div className={`w-9 h-9 rounded-full bg-gradient-to-br ${aclr(c.id)} flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0`}>{ini(c.name, c.phone)}</div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] text-white font-medium truncate">{c.name || c.phone}</p>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            {forwardSelected.size > 0 && (
+              <div className="px-4 py-3 border-t border-white/[0.06] flex justify-end">
+                <button onClick={() => forwardMessage(forwardMsg.id, Array.from(forwardSelected))} className="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-6 py-2 rounded-lg text-[13px] flex items-center gap-2">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+                  Send ({forwardSelected.size})
                 </button>
-              ))}
-              {convos.filter((c) => c.id !== forwardMsg.conversation_id).length === 0 && (
-                <p className="text-center text-[13px] text-white/30 py-8">No other chats to forward to</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Delete Popup */}
+      {deletePopup && (
+        <div className="fixed inset-0 z-[200] bg-black/70 flex items-center justify-center" onClick={() => setDeletePopup(null)}>
+          <div className="bg-[#233138] rounded-xl border border-white/[0.08] shadow-2xl w-[300px] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="px-5 pt-5 pb-3">
+              <p className="text-[14px] text-white font-medium">Delete message?</p>
+              <p className="text-[12px] text-white/40 mt-1 truncate">{deletePopup.content?.substring(0, 60)}</p>
+            </div>
+            <div className="px-4 pb-4 flex flex-col gap-2">
+              {deletePopup.role === "assistant" && (
+                <button onClick={() => delMsg(deletePopup.id, true)} className="w-full py-2.5 rounded-lg bg-red-500/20 text-red-400 text-[13px] font-medium hover:bg-red-500/30 transition">
+                  Delete for everyone
+                </button>
               )}
+              <button onClick={() => delMsg(deletePopup.id, false)} className="w-full py-2.5 rounded-lg bg-white/[0.06] text-white/70 text-[13px] font-medium hover:bg-white/[0.10] transition">
+                Delete for me
+              </button>
+              <button onClick={() => setDeletePopup(null)} className="w-full py-2.5 rounded-lg text-white/40 text-[13px] hover:text-white/60 transition">
+                Cancel
+              </button>
             </div>
           </div>
         </div>
