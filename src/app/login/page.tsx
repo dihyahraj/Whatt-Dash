@@ -86,7 +86,7 @@ export default function LoginPage() {
           </div>
 
           {/* Form */}
-          <div className="px-8 pt-6 pb-8">
+          <form onSubmit={handleSubmit} className="px-8 pt-6 pb-8">
             {/* Error */}
             {error && (
               <div className="mb-5 px-4 py-3 rounded-xl text-[13px] font-medium flex items-center gap-2.5" style={{ background: "var(--danger-muted)", color: "var(--danger)", border: "1px solid rgba(225,29,72,0.15)" }}>
@@ -123,7 +123,6 @@ export default function LoginPage() {
                   style={{ background: "var(--surface-3)", color: "var(--text-1)", border: "1.5px solid var(--border)" }}
                   onFocus={e => e.target.style.borderColor = "var(--border-focus)"}
                   onBlur={e => e.target.style.borderColor = "var(--border)"}
-                  onKeyDown={e => e.key === "Enter" && handleSubmit(e)}
                 />
                 <button type="button" onClick={() => setShowPw(!showPw)} className="absolute right-3 top-1/2 -translate-y-1/2 w-8 h-8 rounded-lg flex items-center justify-center tr" style={{ color: "var(--text-4)" }}>
                   <span className="material-symbols-rounded" style={{ fontSize: 20 }}>{showPw ? "visibility_off" : "visibility"}</span>
@@ -133,8 +132,8 @@ export default function LoginPage() {
 
             {/* Submit */}
             <button
-              onClick={handleSubmit} disabled={busy || !email || !password}
-              className="w-full font-bold py-3.5 rounded-xl text-[14px] flex items-center justify-center gap-2 tr disabled:opacity-40 disabled:cursor-not-allowed group"
+              type="submit" disabled={busy || !email || !password}
+              className="w-full font-bold py-3.5 rounded-xl text-[14px] flex items-center justify-center gap-2 tr disabled:opacity-40 disabled:cursor-not-allowed"
               style={{ background: "var(--primary)", color: "var(--primary-text)", boxShadow: !busy && email && password ? "0 4px 20px var(--primary-glow)" : "none" }}
             >
               {busy ? (
@@ -149,7 +148,7 @@ export default function LoginPage() {
               <span className="material-symbols-rounded" style={{ fontSize: 14, color: "var(--text-4)" }}>shield</span>
               <p className="text-[11px] font-medium" style={{ color: "var(--text-4)" }}>Authorized access only</p>
             </div>
-          </div>
+          </form>
         </div>
 
         {/* Bottom branding */}
