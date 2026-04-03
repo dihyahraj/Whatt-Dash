@@ -73,6 +73,7 @@ export default function Dashboard() {
   const [qrEditId, setQrEditId] = useState<string|null>(null);
   const [qrSearch, setQrSearch] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [msgMenuPos, setMsgMenuPos] = useState<{x: number; y: number; isMe: boolean} | null>(null);
 
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -133,7 +134,7 @@ export default function Dashboard() {
   }
 
   /* ═══ ACTIONS ═══ */
-  function closeMenus() { setChatMenuId(null); setHeaderMenu(false); setMsgMenuId(null); }
+  function closeMenus() { setChatMenuId(null); setHeaderMenu(false); setMsgMenuId(null); setMsgMenuPos(null); }
   function pausePoll(ms = 4000) { skipPollRef.current = true; setTimeout(() => { skipPollRef.current = false; }, ms); }
 
   async function act(url: string, body?: object) { closeMenus(); pausePoll(); if (body && typeof body === "object") { const b = body as Record<string, unknown>; const cid = url.match(/conversations\/([^/]+)\//)?.[1]; if ("archived" in b && b.archived) { const chat = convos.find(c => c.id === cid); setConvos(p => p.filter(c => c.id !== cid)); if (chat) setArchived(p => [{ ...chat, is_archived: true }, ...p]); if (selId === cid) { setSelId(null); setMsgs([]); } } else { setConvos(p => p.map(c => { if (c.id !== cid) return c; if ("pinned" in b) return { ...c, is_pinned: !!b.pinned }; if ("muted" in b) return { ...c, is_muted: !!b.muted }; if ("unread_count" in b) return { ...c, unread_count: b.unread_count as number }; return c; })); } } fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined }).catch(() => {}); }
@@ -149,7 +150,7 @@ export default function Dashboard() {
   function downloadContactsCsv() { window.open("/api/contacts/export", "_blank"); }
   function addOptimisticMsg(tid: string, content: string, type: string = "text") { if (!selId) return; const m: Message = { id: tid, conversation_id: selId, role: "assistant", content, message_type: type as Message["message_type"], media_url: null, media_mime_type: null, media_filename: null, media_caption: null, media_sha256: null, reply_to_id: null, reaction: null, reaction_msg_id: null, latitude: null, longitude: null, location_name: null, location_address: null, whatsapp_msg_id: null, is_deleted: false, is_starred: false, status: "sent", created_at: new Date().toISOString() }; setMsgs(p => [...p, m]); setIsAtBottom(true); }
 
-  useEffect(() => { const h = (e: KeyboardEvent) => { if (e.key === "Escape") { setReplyTo(null); setChatMenuId(null); setMsgMenuId(null); setReactPickerId(null); setShowEmoji(false); setHeaderMenu(false); setImgPreview(null); setShowChatSearch(false); setChatLabelOpen(null); setShowLabelMenu(null); setForwardMsg(null); setForwardSelected(new Set()); } }; document.addEventListener("keydown", h); return () => document.removeEventListener("keydown", h); }, []);
+  useEffect(() => { const h = (e: KeyboardEvent) => { if (e.key === "Escape") { setReplyTo(null); setChatMenuId(null); setMsgMenuId(null); setMsgMenuPos(null); setReactPickerId(null); setShowEmoji(false); setHeaderMenu(false); setImgPreview(null); setShowChatSearch(false); setChatLabelOpen(null); setShowLabelMenu(null); setForwardMsg(null); setForwardSelected(new Set()); } }; document.addEventListener("keydown", h); return () => document.removeEventListener("keydown", h); }, []);
 
   /* ═══ HELPERS ═══ */
   function ft(d: string) { const t = new Date(d), n = new Date(), df = n.getTime() - t.getTime(); if (df < 86400000 && t.getDate() === n.getDate()) return t.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); if (df < 172800000) return "Yesterday"; if (df < 604800000) return t.toLocaleDateString([], { weekday: "short" }); return t.toLocaleDateString([], { month: "short", day: "numeric" }); }
@@ -261,8 +262,8 @@ export default function Dashboard() {
                     <p className="text-[12.5px] truncate flex-1 min-w-0" style={{ color: c.unread_count > 0 ? "var(--text-2)" : "var(--text-3)" }}>{lmp(c)}</p>
                     <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
                       {c.labels?.map((l: Label) => <span key={l.id} className="w-[7px] h-[7px] rounded-full" style={{ background: l.color }}/>)}
-                      {c.is_pinned && <span className="text-[10px]">📌</span>}
-                      {c.is_muted && <span className="text-[10px]">🔕</span>}
+                      {c.is_pinned && <span className="material-symbols-rounded" style={{ fontSize: 14, color: "var(--text-4)", fontVariationSettings: "'FILL' 1" }}>push_pin</span>}
+                      {c.is_muted && <span className="material-symbols-rounded" style={{ fontSize: 14, color: "var(--text-4)" }}>notifications_off</span>}
                       {c.unread_count > 0 && <span className="min-w-[20px] h-[20px] rounded-full text-[10px] font-bold flex items-center justify-center px-1.5" style={{ background: "var(--unread-badge)", color: "var(--unread-badge-text)" }}>{c.unread_count}</span>}
                     </div>
                   </div>
@@ -356,12 +357,11 @@ export default function Dashboard() {
                   <div className="relative max-w-[70%] sm:max-w-[60%]">
                     {replied && <div className="px-3 py-2 rounded-t-2xl text-[11px]" style={{ background: isMe ? "var(--bubble-me)" : "var(--bubble-them)", borderLeft: "3px solid var(--primary)", opacity: 0.85 }}><p className="font-bold text-[10px]" style={{ color: "var(--primary)" }}>{replied.role === "user" ? (sel?.name || sel?.phone) : "You"}</p><p className="truncate" style={{ color: "var(--text-3)" }}>{replied.content}</p></div>}
                     <div className={`relative px-3 py-[7px] ${msg.message_type === "sticker" ? "" : replied ? "rounded-b-2xl" : "rounded-2xl"}`} style={msg.message_type === "sticker" ? {} : { background: isMe ? "var(--bubble-me)" : "var(--bubble-them)", color: isMe ? "var(--bubble-me-text)" : "var(--bubble-them-text)", boxShadow: "var(--shadow-sm)", ...(isMe && !replied ? { borderTopRightRadius: "6px" } : !isMe && !replied ? { borderTopLeftRadius: "6px" } : {}) }}>
-                      {!msg.is_deleted && <div className="absolute right-0 top-0 opacity-0 group-hover/m:opacity-100 z-10"><button onClick={e => { e.stopPropagation(); setMsgMenuId(msgMenuId === msg.id ? null : msg.id); setChatMenuId(null); setHeaderMenu(false); }} className="w-7 h-7 rounded-bl-xl flex items-center justify-center" style={{ background: isMe ? "var(--bubble-me)" : "var(--bubble-them)" }}><span className="material-symbols-rounded" style={{ fontSize: 16, color: "var(--text-3)" }}>expand_more</span></button></div>}
+                      {!msg.is_deleted && <div className="absolute right-0 top-0 opacity-0 group-hover/m:opacity-100 z-10"><button onClick={e => { e.stopPropagation(); const rect = e.currentTarget.getBoundingClientRect(); setMsgMenuPos(msgMenuId === msg.id ? null : { x: isMe ? rect.right : rect.left, y: rect.bottom + 4, isMe }); setMsgMenuId(msgMenuId === msg.id ? null : msg.id); setChatMenuId(null); setHeaderMenu(false); }} className="w-7 h-7 rounded-bl-xl flex items-center justify-center" style={{ background: isMe ? "var(--bubble-me)" : "var(--bubble-them)" }}><span className="material-symbols-rounded" style={{ fontSize: 16, color: "var(--text-3)" }}>expand_more</span></button></div>}
                       {media(msg)}
-                      <div className="flex items-center justify-end gap-0.5 mt-0.5">{msg.is_starred && <span className="text-[9px]">⭐</span>}<span className="text-[10px]" style={{ color: "var(--text-4)" }}>{mt(msg.created_at)}</span>{isMe && si(msg.status || "sent")}</div>
+                      <div className="flex items-center justify-end gap-0.5 mt-0.5">{msg.is_starred && <span className="material-symbols-rounded" style={{ fontSize: 12, color: "#eab308", fontVariationSettings: "'FILL' 1" }}>star</span>}<span className="text-[10px]" style={{ color: "var(--text-4)" }}>{mt(msg.created_at)}</span>{isMe && si(msg.status || "sent")}</div>
                     </div>
                     {msg.reaction && <div className="absolute -bottom-3 rounded-full px-1.5 py-0.5 text-[12px] cursor-pointer hover:scale-110 tr" style={{ ...(isMe ? { right: 8 } : { left: 8 }), background: "var(--surface-1)", boxShadow: "var(--shadow-md)", border: "1px solid var(--border)" }} onClick={e => { e.stopPropagation(); reactMsg(msg.id, msg.reaction!); }}>{msg.reaction}</div>}
-                    {msgMenuId === msg.id && (() => { const nb = i >= displayMsgs.length - 3; return <div className={`absolute ${isMe ? "right-0" : "left-0"} ${nb ? "bottom-8" : "top-8"} z-[100] ${s.menuWrap}`} style={{ background: "var(--surface-2)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)", backdropFilter: "blur(16px)" }} onClick={e => e.stopPropagation()}><MI i="reply" l="Reply" o={() => { setReplyTo(msg); setMsgMenuId(null); inputRef.current?.focus(); }}/><MI i="add_reaction" l="React" o={() => { setReactPickerId(msg.id); setMsgMenuId(null); }}/><MI i={msg.is_starred ? "star" : "star_outline"} l={msg.is_starred ? "Unstar" : "Star"} o={() => starMsg(msg.id, !msg.is_starred)}/><MI i="content_copy" l="Copy" o={() => { navigator.clipboard.writeText(msg.content); setMsgMenuId(null); }}/><MI i="forward" l="Forward" o={() => { setForwardMsg(msg); setForwardSelected(new Set()); setMsgMenuId(null); }}/></div>; })()}
                     {reactPickerId === msg.id && <div className={`absolute ${isMe ? "right-0" : "left-0"} -top-12 z-[100] rounded-full px-2 py-1.5 flex gap-0.5 anim-scale-in`} style={{ background: "var(--surface-1)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)" }} onClick={e => e.stopPropagation()}>{QUICK_REACT.map(e => <button key={e} onClick={() => reactMsg(msg.id, e)} className="text-[18px] hover:scale-125 tr w-8 h-8 rounded-full flex items-center justify-center hover:bg-[var(--primary-muted)]">{e}</button>)}</div>}
                   </div>
                 </div>
@@ -401,6 +401,21 @@ export default function Dashboard() {
         </>)}
       </div>
 
+      {/* ▓▓ Fixed Message Menu ▓▓ */}
+      {msgMenuId && msgMenuPos && (() => {
+        const curMsg = msgs.find(m => m.id === msgMenuId);
+        if (!curMsg) return null;
+        const menuH = 220; // approx height of 5 items
+        const flipUp = msgMenuPos.y + menuH > window.innerHeight - 20;
+        return <div className="fixed z-[200] anim-scale-in rounded-2xl py-1.5 min-w-[200px]" style={{ top: flipUp ? msgMenuPos.y - menuH - 40 : msgMenuPos.y, left: msgMenuPos.isMe ? undefined : msgMenuPos.x, right: msgMenuPos.isMe ? window.innerWidth - msgMenuPos.x : undefined, background: "var(--surface-2)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)", backdropFilter: "blur(20px)" }} onClick={e => e.stopPropagation()}>
+          <MI i="reply" l="Reply" o={() => { setReplyTo(curMsg); setMsgMenuId(null); setMsgMenuPos(null); inputRef.current?.focus(); }}/>
+          <MI i="add_reaction" l="React" o={() => { setReactPickerId(curMsg.id); setMsgMenuId(null); setMsgMenuPos(null); }}/>
+          <MI i={curMsg.is_starred ? "star" : "star_outline"} l={curMsg.is_starred ? "Unstar" : "Star"} o={() => { starMsg(curMsg.id, !curMsg.is_starred); setMsgMenuPos(null); }}/>
+          <MI i="content_copy" l="Copy" o={() => { navigator.clipboard.writeText(curMsg.content); setMsgMenuId(null); setMsgMenuPos(null); }}/>
+          <MI i="forward" l="Forward" o={() => { setForwardMsg(curMsg); setForwardSelected(new Set()); setMsgMenuId(null); setMsgMenuPos(null); }}/>
+        </div>;
+      })()}
+
       {/* ▓▓ Image Preview ▓▓ */}
       {imgPreview && <div className="fixed inset-0 z-[200] flex items-center justify-center" style={{ background: "var(--bg-overlay)", backdropFilter: "blur(12px)" }} onClick={() => setImgPreview(null)}><button className="absolute top-5 right-5 w-10 h-10 rounded-full flex items-center justify-center text-white" style={{ background: "rgba(255,255,255,0.15)" }}>✕</button><img src={imgPreview} alt="" className="max-w-[90vw] max-h-[90vh] object-contain rounded-2xl shadow-2xl" onClick={e => e.stopPropagation()}/></div>}
 
@@ -415,7 +430,7 @@ export default function Dashboard() {
         </div>
       </div>}
 
-      {(chatMenuId || msgMenuId || headerMenu || reactPickerId) && <div className="fixed inset-0 z-[90]" onClick={() => { setChatMenuId(null); setMsgMenuId(null); setHeaderMenu(false); setReactPickerId(null); setShowLabelMenu(null); setChatLabelOpen(null); setShowQuickReplies(false); }}/>}
+      {(chatMenuId || msgMenuId || headerMenu || reactPickerId) && <div className="fixed inset-0 z-[90]" onClick={() => { setChatMenuId(null); setMsgMenuId(null); setMsgMenuPos(null); setHeaderMenu(false); setReactPickerId(null); setShowLabelMenu(null); setChatLabelOpen(null); setShowQuickReplies(false); }}/>}
     </div>
   );
 }
