@@ -67,6 +67,9 @@ export interface Label {
   id: string;
   name: string;
   color: string;
+  created_by_email?: string;
+  created_by_name?: string;
+  created_by_role?: string;
 }
 
 export interface QuickReply {
