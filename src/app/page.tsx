@@ -250,7 +250,7 @@ export default function Dashboard() {
           {filtered.length === 0 && <div className="flex flex-col items-center justify-center h-48 gap-2"><span className="material-symbols-rounded" style={{ fontSize: 32, color: "var(--text-4)" }}>forum</span><p className="text-[13px]" style={{ color: "var(--text-4)" }}>{search ? "No results" : "No conversations"}</p></div>}
           {filtered.map(c => {
             const isSel = selId === c.id;
-            return <div key={c.id} className="relative tr" style={{ background: isSel ? "var(--primary-muted)" : "transparent" }} onMouseEnter={e => { if (!isSel) e.currentTarget.style.background = "var(--surface-3)"; }} onMouseLeave={e => { if (!isSel) e.currentTarget.style.background = "transparent"; }}>
+            return <div key={c.id} className="relative tr group" style={{ background: isSel ? "var(--primary-muted)" : "transparent" }} onMouseEnter={e => { if (!isSel) e.currentTarget.style.background = "var(--surface-3)"; }} onMouseLeave={e => { if (!isSel) e.currentTarget.style.background = "transparent"; }}>
               <div className="flex items-center px-3 py-3 cursor-pointer gap-3" onClick={() => { setSelId(c.id); setChatMenuId(null); setSidebarOpen(false); }}>
                 <div className={`w-[48px] h-[48px] rounded-[16px] bg-gradient-to-br ${aclr(c.id)} flex items-center justify-center flex-shrink-0 text-white text-[14px] font-bold shadow-sm`}>{ini(c.name, c.phone)}</div>
                 <div className="flex-1 min-w-0">
@@ -269,7 +269,7 @@ export default function Dashboard() {
                   </div>
                 </div>
                 <div className="relative flex-shrink-0">
-                  <button onClick={e => { e.stopPropagation(); setChatMenuId(chatMenuId === c.id ? null : c.id); }} className="w-8 h-8 rounded-lg flex items-center justify-center tr opacity-0 group-hover:opacity-100" style={{ color: "var(--text-4)" }}><span className="material-symbols-rounded" style={{ fontSize: 18 }}>more_vert</span></button>
+                  <button onClick={e => { e.stopPropagation(); setChatMenuId(chatMenuId === c.id ? null : c.id); }} className="w-8 h-8 rounded-lg flex items-center justify-center tr opacity-40 hover:opacity-100 group-hover:opacity-80" style={{ color: "var(--text-3)" }}><span className="material-symbols-rounded" style={{ fontSize: 18 }}>more_vert</span></button>
                   {chatMenuId === c.id && <ChatCtx convo={c} onClose={() => setChatMenuId(null)}/>}
                 </div>
               </div>
