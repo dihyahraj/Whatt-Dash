@@ -4,8 +4,10 @@ let _supabase: SupabaseClient | null = null;
 
 export function getSupabase(): SupabaseClient {
   if (!_supabase) {
+    // Use internal URL for server-side (Docker network), fallback to public URL
+    const url = process.env.SUPABASE_INTERNAL_URL || process.env.NEXT_PUBLIC_SUPABASE_URL!;
     _supabase = createClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      url,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
   }
