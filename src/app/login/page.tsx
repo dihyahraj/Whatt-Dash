@@ -187,7 +187,7 @@ export default function LoginPage() {
                 {busy ? <><span className="material-symbols-rounded animate-spin" style={{ fontSize: 18 }}>progress_activity</span>Verifying...</> : <><span className="material-symbols-rounded" style={{ fontSize: 18 }}>verified_user</span>Verify</>}
               </button>
 
-              <button onClick={() => { if (supabase) supabase.auth.signOut().catch(() => {}); setMfaStep(false); setMfaCode(["","","","","",""]); setError(""); setPassword(""); setBusy(false); }} className="w-full py-2.5 text-[13px] font-medium mt-3 tr rounded-xl" style={{ color: "var(--text-3)" }}>← Back to sign in</button>
+              <button onClick={() => { Object.keys(localStorage).forEach(k => { if (k.startsWith("sb-")) localStorage.removeItem(k); }); if (supabase) supabase.auth.signOut().catch(() => {}); window.location.reload(); }} className="w-full py-2.5 text-[13px] font-medium mt-3 tr rounded-xl" style={{ color: "var(--text-3)" }}>← Back to sign in</button>
               <p className="text-[11px] text-center mt-4 font-medium" style={{ color: "var(--text-4)" }}>Open your authenticator app for the code</p>
             </div>
           )}
