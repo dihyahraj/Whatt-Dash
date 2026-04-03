@@ -79,12 +79,20 @@ export async function downloadAndStoreMedia(
       return null;
     }
 
-    // Step 5: Get public URL
+    // Step 5: Get public URL (use external URL for browser access)
     const { data: urlData } = supabase.storage
       .from(BUCKET)
       .getPublicUrl(storagePath);
 
-    return urlData.publicUrl;
+    // Replace internal Docker URL with external URL for browser access
+    const externalUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const internalUrl = process.env.SUPABASE_INTERNAL_URL;
+    let publicUrl = urlData.publicUrl;
+    if (externalUrl && internalUrl && publicUrl.includes(internalUrl)) {
+      publicUrl = publicUrl.replace(internalUrl, externalUrl);
+    }
+
+    return publicUrl;
   } catch (error) {
     console.error("downloadAndStoreMedia error:", error);
     return null;
