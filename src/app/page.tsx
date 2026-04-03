@@ -713,7 +713,7 @@ export default function Dashboard() {
                 return (
                   <div key={msg.id}>
                     {sd(displayMsgs, i) && <div className="flex justify-center my-3"><span className="px-3 py-1 rounded-md bg-[#182229] text-[11px] text-white/50 shadow">{dl(msg.created_at)}</span></div>}
-                    <div className={`flex ${isMe ? "justify-end" : "justify-start"} mb-[2px] group/m`}>
+                    <div className={`flex ${isMe ? "justify-end" : "justify-start"} ${msg.reaction ? "mb-4" : "mb-[2px]"} group/m`}>
                       <div className={`relative max-w-[65%]`}>
                         {replied && <div className={`px-2.5 py-1.5 rounded-t-lg text-[11px] border-l-[3px] ${isMe ? "bg-[#025144] border-emerald-300/50" : "bg-[#1d282f] border-purple-400/50"}`}><p className="font-semibold text-[10px] text-emerald-300 mb-0.5">{replied.role === "user" ? (sel?.name || sel?.phone) : "You"}</p><p className="truncate text-white/50">{replied.content}</p></div>}
 
