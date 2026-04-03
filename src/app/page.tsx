@@ -25,7 +25,7 @@ const s = {
 };
 
 export default function Dashboard() {
-  const { user, loading: authLoading, signOut, supabase } = useAuth();
+  const { user, loading: authLoading, signOut, supabase, verifyMfa } = useAuth();
   const router = useRouter();
 
   /* ═══ THEME ═══ */
@@ -56,7 +56,7 @@ export default function Dashboard() {
     return () => mq.removeEventListener("change", handler);
   }, [theme]);
 
-  const supabase = useMemo(() => { const u = process.env.NEXT_PUBLIC_SUPABASE_URL, k = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY; if (!u || !k) return null; return createClient(u, k); }, []);
+  const sbRT = useMemo(() => { const u = process.env.NEXT_PUBLIC_SUPABASE_URL, k = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY; if (!u || !k) return null; return createClient(u, k); }, []);
 
   /* ═══ STATE ═══ */
   const [convos, setConvos] = useState<ConversationWithLastMessage[]>([]);
@@ -99,14 +99,12 @@ export default function Dashboard() {
   const [msgMenuPos, setMsgMenuPos] = useState<{x: number; y: number; isMe: boolean} | null>(null);
   const [sidebarMenu, setSidebarMenu] = useState(false);
   const [showLabelsModal, setShowLabelsModal] = useState(false);
-  const [show2fa, setShow2fa] = useState(false);
-  const [mfaEnrolled, setMfaEnrolled] = useState(false);
-  const [mfaQr, setMfaQr] = useState("");
+  const [show2FA, setShow2FA] = useState(false);
+  const [mfa2FAState, setMfa2FAState] = useState<"idle"|"enrolling"|"verifying"|"enabled">("idle");
+  const [mfaQR, setMfaQR] = useState("");
   const [mfaSecret, setMfaSecret] = useState("");
   const [mfaFactorId, setMfaFactorId] = useState("");
   const [mfaVerifyCode, setMfaVerifyCode] = useState("");
-  const [mfaStep, setMfaStep] = useState<"check"|"setup"|"verify"|"done">("check");
-  const [mfaBusy, setMfaBusy] = useState(false);
   const [mfaError, setMfaError] = useState("");
 
   const endRef = useRef<HTMLDivElement>(null);
@@ -145,14 +143,14 @@ export default function Dashboard() {
   function notifyNewMsg(msg: Message) { const c = convos.find(x => x.id === msg.conversation_id); if (c?.is_muted) return; const title = c?.name || c?.phone || "New Message"; const body = msg.content?.substring(0, 100) || "New message"; if ("Notification" in window && Notification.permission === "granted") { new Notification(title, { body, icon: "/favicon.ico", tag: msg.conversation_id }); } try { const ctx = new AudioContext(); const o = ctx.createOscillator(); const g = ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.frequency.value = 800; g.gain.value = 0.3; o.start(); g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3); o.stop(ctx.currentTime + 0.3); } catch {} }
 
   useEffect(() => {
-    if (!supabase) return;
-    const ch = supabase.channel("rt")
+    if (!sbRT) return;
+    const ch = sbRT.channel("rt")
       .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (p) => { const m = p.new as Message; if (m.conversation_id === selId) { setMsgs(prev => { if (prev.some(x => x.id === m.id)) return prev; if (lastSentIdsRef.current.has(m.id)) return prev; const ti = prev.findIndex(x => x.id.startsWith("temp_") && x.content === m.content && x.role === m.role); if (ti >= 0) { const u = [...prev]; u[ti] = m; return u; } if (m.role === "assistant" && sendingRef.current) return prev; return [...prev, m]; }); if (m.role === "user") fetch(`/api/conversations/${selId}/read`, { method: "POST" }).catch(() => {}); } if (m.role === "user") notifyNewMsg(m); fetchConvos(); })
       .on("postgres_changes", { event: "UPDATE", schema: "public", table: "messages" }, (p) => { const u = p.new as Message; setMsgs(prev => prev.map(m => m.id === u.id ? u : m)); })
       .on("postgres_changes", { event: "*", schema: "public", table: "conversations" }, () => fetchConvos())
       .subscribe();
-    return () => { supabase.removeChannel(ch); };
-  }, [selId, fetchConvos, supabase]);
+    return () => { sbRT.removeChannel(ch); };
+  }, [selId, fetchConvos, sbRT]);
 
   useEffect(() => { if ("Notification" in window && Notification.permission === "default") Notification.requestPermission(); }, []);
   useEffect(() => { const t = convos.reduce((s, c) => s + (c.unread_count || 0), 0); document.title = t > 0 ? `(${t}) Whatt Dash` : "Whatt Dash"; }, [convos]);
@@ -184,51 +182,7 @@ export default function Dashboard() {
   function downloadContactsCsv() { window.open("/api/contacts/export", "_blank"); }
   function addOptimisticMsg(tid: string, content: string, type: string = "text") { if (!selId) return; const m: Message = { id: tid, conversation_id: selId, role: "assistant", content, message_type: type as Message["message_type"], media_url: null, media_mime_type: null, media_filename: null, media_caption: null, media_sha256: null, reply_to_id: null, reaction: null, reaction_msg_id: null, latitude: null, longitude: null, location_name: null, location_address: null, whatsapp_msg_id: null, is_deleted: false, is_starred: false, status: "sent", created_at: new Date().toISOString() }; setMsgs(p => [...p, m]); setIsAtBottom(true); }
 
-  /* ═══ 2FA FUNCTIONS ═══ */
-  async function open2fa() {
-    setSidebarMenu(false); setShow2fa(true); setMfaStep("check"); setMfaError(""); setMfaBusy(true);
-    if (!supabase) { setMfaBusy(false); return; }
-    try {
-      const { data } = await supabase.auth.mfa.listFactors();
-      const totp = data?.totp?.[0];
-      if (totp) { setMfaEnrolled(true); setMfaFactorId(totp.id); setMfaStep("done"); }
-      else { setMfaEnrolled(false); setMfaStep("check"); }
-    } catch { setMfaError("Failed to check 2FA status"); }
-    setMfaBusy(false);
-  }
-  async function enroll2fa() {
-    if (!supabase) return; setMfaBusy(true); setMfaError("");
-    try {
-      const { data, error } = await supabase.auth.mfa.enroll({ factorType: "totp", friendlyName: "Whatt Dash" });
-      if (error) { setMfaError(error.message); setMfaBusy(false); return; }
-      if (data) { setMfaQr(data.totp.qr_code); setMfaSecret(data.totp.secret); setMfaFactorId(data.id); setMfaStep("setup"); }
-    } catch (e) { setMfaError(String(e)); }
-    setMfaBusy(false);
-  }
-  async function verify2faEnroll() {
-    if (!supabase || !mfaVerifyCode || mfaVerifyCode.length !== 6) { setMfaError("Enter 6-digit code"); return; }
-    setMfaBusy(true); setMfaError("");
-    try {
-      const { data: ch, error: cErr } = await supabase.auth.mfa.challenge({ factorId: mfaFactorId });
-      if (cErr || !ch) { setMfaError("Challenge failed"); setMfaBusy(false); return; }
-      const { error: vErr } = await supabase.auth.mfa.verify({ factorId: mfaFactorId, challengeId: ch.id, code: mfaVerifyCode });
-      if (vErr) { setMfaError("Invalid code. Try again."); setMfaVerifyCode(""); setMfaBusy(false); return; }
-      setMfaEnrolled(true); setMfaStep("done"); setMfaVerifyCode("");
-    } catch (e) { setMfaError(String(e)); }
-    setMfaBusy(false);
-  }
-  async function unenroll2fa() {
-    if (!supabase || !confirm("Disable 2FA? You won't need a code to login anymore.")) return;
-    setMfaBusy(true); setMfaError("");
-    try {
-      const { error } = await supabase.auth.mfa.unenroll({ factorId: mfaFactorId });
-      if (error) { setMfaError(error.message); setMfaBusy(false); return; }
-      setMfaEnrolled(false); setMfaStep("check"); setMfaQr(""); setMfaSecret("");
-    } catch (e) { setMfaError(String(e)); }
-    setMfaBusy(false);
-  }
-
-  useEffect(() => { const h = (e: KeyboardEvent) => { if (e.key === "Escape") { setReplyTo(null); setChatMenuId(null); setMsgMenuId(null); setMsgMenuPos(null); setReactPickerId(null); setShowEmoji(false); setHeaderMenu(false); setImgPreview(null); setShowChatSearch(false); setChatLabelOpen(null); setShowLabelMenu(null); setForwardMsg(null); setForwardSelected(new Set()); setSidebarMenu(false); setShowLabelsModal(false); setShow2fa(false); } }; document.addEventListener("keydown", h); return () => document.removeEventListener("keydown", h); }, []);
+  useEffect(() => { const h = (e: KeyboardEvent) => { if (e.key === "Escape") { setReplyTo(null); setChatMenuId(null); setMsgMenuId(null); setMsgMenuPos(null); setReactPickerId(null); setShowEmoji(false); setHeaderMenu(false); setImgPreview(null); setShowChatSearch(false); setChatLabelOpen(null); setShowLabelMenu(null); setForwardMsg(null); setForwardSelected(new Set()); setSidebarMenu(false); setShowLabelsModal(false); setShow2FA(false); } }; document.addEventListener("keydown", h); return () => document.removeEventListener("keydown", h); }, []);
 
   /* ═══ HELPERS ═══ */
   function ft(d: string) { const t = new Date(d), n = new Date(), df = n.getTime() - t.getTime(); if (df < 86400000 && t.getDate() === n.getDate()) return t.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); if (df < 172800000) return "Yesterday"; if (df < 604800000) return t.toLocaleDateString([], { weekday: "short" }); return t.toLocaleDateString([], { month: "short", day: "numeric" }); }
@@ -281,6 +235,54 @@ export default function Dashboard() {
     </div>;
   }
 
+  /* ═══ 2FA FUNCTIONS ═══ */
+  async function open2FAModal() {
+    setShow2FA(true); setMfaError(""); setMfaVerifyCode("");
+    if (!supabase) return;
+    try {
+      const { data: factors } = await supabase.auth.mfa.listFactors();
+      const totp = factors?.totp?.find(f => f.status === "verified");
+      if (totp) { setMfa2FAState("enabled"); setMfaFactorId(totp.id); }
+      else setMfa2FAState("idle");
+    } catch { setMfa2FAState("idle"); }
+  }
+
+  async function enroll2FA() {
+    if (!supabase) return;
+    setMfaError(""); setMfa2FAState("enrolling");
+    try {
+      const { data, error } = await supabase.auth.mfa.enroll({ factorType: "totp", friendlyName: "Whatt Dash" });
+      if (error || !data) { setMfaError(error?.message || "Failed to enroll"); setMfa2FAState("idle"); return; }
+      setMfaQR(data.totp.qr_code);
+      setMfaSecret(data.totp.secret);
+      setMfaFactorId(data.id);
+      setMfa2FAState("verifying");
+    } catch (e) { setMfaError(String(e)); setMfa2FAState("idle"); }
+  }
+
+  async function verify2FAEnrollment() {
+    if (!supabase || !mfaVerifyCode || mfaVerifyCode.length !== 6) { setMfaError("Enter 6-digit code"); return; }
+    setMfaError("");
+    try {
+      const { data: challenge, error: cErr } = await supabase.auth.mfa.challenge({ factorId: mfaFactorId });
+      if (cErr || !challenge) { setMfaError("Challenge failed"); return; }
+      const { error: vErr } = await supabase.auth.mfa.verify({ factorId: mfaFactorId, challengeId: challenge.id, code: mfaVerifyCode });
+      if (vErr) { setMfaError("Invalid code. Try again."); setMfaVerifyCode(""); return; }
+      setMfa2FAState("enabled");
+      setMfaVerifyCode("");
+    } catch (e) { setMfaError(String(e)); }
+  }
+
+  async function disable2FA() {
+    if (!supabase || !confirm("Disable Two-Factor Authentication?")) return;
+    setMfaError("");
+    try {
+      const { error } = await supabase.auth.mfa.unenroll({ factorId: mfaFactorId });
+      if (error) { setMfaError(error.message); return; }
+      setMfa2FAState("idle"); setMfaFactorId(""); setMfaQR(""); setMfaSecret("");
+    } catch (e) { setMfaError(String(e)); }
+  }
+
   /* ═══ AUTH LOADING ═══ */
   if (authLoading) return <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--bg)" }}><div className="flex flex-col items-center gap-4"><div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: "var(--primary)" }}><span className="material-symbols-rounded text-white" style={{ fontSize: 28, fontVariationSettings: "'FILL' 1" }}>chat</span></div><div className="w-5 h-5 border-2 rounded-full animate-spin" style={{ borderColor: "var(--primary)", borderTopColor: "transparent" }}/></div></div>;
   if (!user) { window.location.href = "/login"; return <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--bg)" }}><p className="text-sm" style={{ color: "var(--text-4)" }}>Redirecting...</p></div>; }
@@ -322,7 +324,7 @@ export default function Dashboard() {
                     ))}
                   </div>
                   <div style={{ height: 1, background: "var(--border)", margin: "2px 0" }}/>
-                  <MI i="security" l="2FA Security" o={open2fa}/>
+                  <MI i="security" l="Two-Factor Auth" o={() => { setSidebarMenu(false); open2FAModal(); }}/>
                   <MI i="label" l="Manage Labels" o={() => { setSidebarMenu(false); setShowLabelsModal(true); }}/>
                   {user.role === "admin" && <MI i="group" l="Manage Users" o={() => { router.push("/admin"); setSidebarMenu(false); }}/>}
                   {user.role === "admin" && <MI i="download" l="Export Contacts" o={() => { downloadContactsCsv(); setSidebarMenu(false); }}/>}
@@ -480,75 +482,6 @@ export default function Dashboard() {
         </>)}
       </div>
 
-      {/* ▓▓ 2FA Security Modal ▓▓ */}
-      {show2fa && <div className="fixed inset-0 z-[200] flex items-center justify-center" style={{ background: "var(--bg-overlay)", backdropFilter: "blur(8px)" }} onClick={() => setShow2fa(false)}>
-        <div className="rounded-2xl w-[420px] max-h-[580px] overflow-y-auto anim-scale-in" style={{ background: "var(--surface-1)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)" }} onClick={e => e.stopPropagation()}>
-
-          {/* Header */}
-          <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: "1px solid var(--border)" }}>
-            <div className="flex items-center gap-2.5">
-              <span className="material-symbols-rounded" style={{ fontSize: 22, color: "var(--primary)" }}>security</span>
-              <h3 className="text-[16px] font-bold" style={{ color: "var(--text-1)" }}>Two-Factor Authentication</h3>
-            </div>
-            <button onClick={() => setShow2fa(false)} className="w-8 h-8 rounded-lg flex items-center justify-center tr hover:bg-[var(--surface-3)]" style={{ color: "var(--text-3)" }}><span className="material-symbols-rounded" style={{ fontSize: 20 }}>close</span></button>
-          </div>
-
-          <div className="px-5 py-5">
-            {mfaError && <div className="mb-4 px-4 py-3 rounded-xl text-[13px] font-medium flex items-center gap-2" style={{ background: "var(--danger-muted)", color: "var(--danger)" }}><span className="material-symbols-rounded" style={{ fontSize: 16 }}>error</span>{mfaError}</div>}
-
-            {mfaBusy && mfaStep === "check" && <div className="flex flex-col items-center py-8 gap-3"><div className="w-6 h-6 border-2 rounded-full animate-spin" style={{ borderColor: "var(--primary)", borderTopColor: "transparent" }}/><p className="text-[13px]" style={{ color: "var(--text-3)" }}>Checking 2FA status...</p></div>}
-
-            {/* ── Not Enrolled ── */}
-            {!mfaBusy && mfaStep === "check" && !mfaEnrolled && <div className="text-center">
-              <div className="w-16 h-16 rounded-2xl mx-auto flex items-center justify-center mb-4" style={{ background: "var(--surface-3)" }}>
-                <span className="material-symbols-rounded" style={{ fontSize: 32, color: "var(--text-4)" }}>lock_open</span>
-              </div>
-              <h4 className="text-[15px] font-bold mb-1" style={{ color: "var(--text-1)" }}>2FA is not enabled</h4>
-              <p className="text-[13px] mb-5" style={{ color: "var(--text-3)" }}>Add an extra layer of security to your account using an authenticator app like Google Authenticator or Authy.</p>
-              <button onClick={enroll2fa} disabled={mfaBusy} className="w-full font-bold py-3 rounded-xl text-[14px] flex items-center justify-center gap-2 tr" style={{ background: "var(--primary)", color: "var(--primary-text)" }}>
-                <span className="material-symbols-rounded" style={{ fontSize: 18 }}>qr_code_2</span>Enable 2FA
-              </button>
-            </div>}
-
-            {/* ── QR Code Setup ── */}
-            {mfaStep === "setup" && <div>
-              <p className="text-[13px] font-medium mb-4" style={{ color: "var(--text-2)" }}>Scan this QR code with your authenticator app:</p>
-              <div className="flex justify-center mb-4">
-                <div className="p-3 rounded-2xl" style={{ background: "#ffffff" }}>
-                  <img src={mfaQr} alt="QR Code" className="w-[200px] h-[200px]"/>
-                </div>
-              </div>
-              <p className="text-[11px] font-medium mb-1" style={{ color: "var(--text-4)" }}>Or enter this secret key manually:</p>
-              <div className="flex items-center gap-2 mb-5 px-3 py-2.5 rounded-xl" style={{ background: "var(--surface-3)", border: "1px solid var(--border)" }}>
-                <code className="flex-1 text-[12px] font-mono break-all select-all" style={{ color: "var(--primary)" }}>{mfaSecret}</code>
-                <button onClick={() => { navigator.clipboard.writeText(mfaSecret); }} className="w-8 h-8 rounded-lg flex items-center justify-center tr flex-shrink-0" style={{ color: "var(--text-3)" }}><span className="material-symbols-rounded" style={{ fontSize: 16 }}>content_copy</span></button>
-              </div>
-              <p className="text-[13px] font-medium mb-2" style={{ color: "var(--text-2)" }}>Enter the 6-digit code from your app to verify:</p>
-              <div className="flex gap-2 mb-4">
-                <input type="text" inputMode="numeric" maxLength={6} value={mfaVerifyCode} onChange={e => setMfaVerifyCode(e.target.value.replace(/\D/g, "").slice(0, 6))} placeholder="000000" className="flex-1 rounded-xl px-4 py-3 text-[18px] font-bold text-center tracking-[0.3em] focus:outline-none tr" style={{ background: "var(--surface-3)", color: "var(--text-1)", border: "1.5px solid var(--border)", caretColor: "var(--primary)" }} onFocus={e => e.target.style.borderColor = "var(--primary)"} onBlur={e => e.target.style.borderColor = "var(--border)"} onKeyDown={e => e.key === "Enter" && verify2faEnroll()}/>
-              </div>
-              <button onClick={verify2faEnroll} disabled={mfaBusy || mfaVerifyCode.length !== 6} className="w-full font-bold py-3 rounded-xl text-[14px] flex items-center justify-center gap-2 tr disabled:opacity-40" style={{ background: "var(--primary)", color: "var(--primary-text)" }}>
-                {mfaBusy ? <><span className="material-symbols-rounded animate-spin" style={{ fontSize: 18 }}>progress_activity</span>Verifying...</>
-                : <><span className="material-symbols-rounded" style={{ fontSize: 18 }}>verified_user</span>Verify & Enable</>}
-              </button>
-            </div>}
-
-            {/* ── Enrolled / Active ── */}
-            {mfaStep === "done" && mfaEnrolled && <div className="text-center">
-              <div className="w-16 h-16 rounded-2xl mx-auto flex items-center justify-center mb-4" style={{ background: "var(--primary-muted)" }}>
-                <span className="material-symbols-rounded" style={{ fontSize: 32, color: "var(--primary)", fontVariationSettings: "'FILL' 1" }}>verified_user</span>
-              </div>
-              <h4 className="text-[15px] font-bold mb-1" style={{ color: "var(--text-1)" }}>2FA is enabled</h4>
-              <p className="text-[13px] mb-5" style={{ color: "var(--text-3)" }}>Your account is protected with two-factor authentication. You will need to enter a code from your authenticator app each time you sign in.</p>
-              <button onClick={unenroll2fa} disabled={mfaBusy} className="w-full font-semibold py-3 rounded-xl text-[14px] flex items-center justify-center gap-2 tr" style={{ background: "var(--danger-muted)", color: "var(--danger)" }}>
-                {mfaBusy ? <><span className="material-symbols-rounded animate-spin" style={{ fontSize: 18 }}>progress_activity</span>Disabling...</>
-                : <><span className="material-symbols-rounded" style={{ fontSize: 18 }}>lock_open</span>Disable 2FA</>}
-              </button>
-            </div>}
-          </div>
-        </div>
-      </div>}
-
       {/* ▓▓ Labels Modal ▓▓ */}
       {showLabelsModal && (() => {
         const adminLabels = labels.filter(l => l.created_by_role === "admin" || !l.created_by_role);
@@ -620,6 +553,75 @@ export default function Dashboard() {
           </div>
         </div>;
       })()}
+
+      {/* ▓▓ 2FA Settings Modal ▓▓ */}
+      {show2FA && <div className="fixed inset-0 z-[200] flex items-center justify-center" style={{ background: "var(--bg-overlay)", backdropFilter: "blur(8px)" }} onClick={() => setShow2FA(false)}>
+        <div className="rounded-2xl w-[420px] max-h-[600px] overflow-hidden anim-scale-in" style={{ background: "var(--surface-1)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)" }} onClick={e => e.stopPropagation()}>
+          {/* Header */}
+          <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: "1px solid var(--border)" }}>
+            <div className="flex items-center gap-2.5">
+              <span className="material-symbols-rounded" style={{ fontSize: 22, color: "var(--primary)" }}>security</span>
+              <h3 className="text-[16px] font-bold" style={{ color: "var(--text-1)" }}>Two-Factor Auth</h3>
+            </div>
+            <button onClick={() => setShow2FA(false)} className="w-8 h-8 rounded-lg flex items-center justify-center tr hover:bg-[var(--surface-3)]" style={{ color: "var(--text-3)" }}><span className="material-symbols-rounded" style={{ fontSize: 20 }}>close</span></button>
+          </div>
+
+          <div className="px-5 py-5">
+            {mfaError && <div className="mb-4 px-4 py-3 rounded-xl text-[13px] font-medium flex items-center gap-2.5" style={{ background: "var(--danger-muted)", color: "var(--danger)" }}><span className="material-symbols-rounded" style={{ fontSize: 16 }}>error</span>{mfaError}</div>}
+
+            {/* State: Idle — Not enrolled */}
+            {mfa2FAState === "idle" && <div className="text-center py-4">
+              <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ background: "var(--surface-3)" }}><span className="material-symbols-rounded" style={{ fontSize: 32, color: "var(--text-4)" }}>shield</span></div>
+              <p className="text-[15px] font-bold mb-1" style={{ color: "var(--text-1)" }}>2FA is disabled</p>
+              <p className="text-[13px] mb-6" style={{ color: "var(--text-3)" }}>Add an extra layer of security to your account using an authenticator app</p>
+              <button onClick={enroll2FA} className="w-full font-bold py-3 rounded-xl text-[14px] flex items-center justify-center gap-2 tr" style={{ background: "var(--primary)", color: "var(--primary-text)" }}><span className="material-symbols-rounded" style={{ fontSize: 18 }}>qr_code_2</span>Enable 2FA</button>
+            </div>}
+
+            {/* State: Enrolling — loading */}
+            {mfa2FAState === "enrolling" && <div className="text-center py-8"><div className="w-6 h-6 border-2 rounded-full animate-spin mx-auto mb-3" style={{ borderColor: "var(--primary)", borderTopColor: "transparent" }}/><p className="text-[13px]" style={{ color: "var(--text-3)" }}>Generating QR code...</p></div>}
+
+            {/* State: Verifying — QR code shown */}
+            {mfa2FAState === "verifying" && <div>
+              <div className="text-center mb-4">
+                <p className="text-[14px] font-bold mb-1" style={{ color: "var(--text-1)" }}>Scan this QR code</p>
+                <p className="text-[12px]" style={{ color: "var(--text-3)" }}>Open Google Authenticator → Tap + → Scan QR code</p>
+              </div>
+
+              {/* QR Code */}
+              <div className="flex justify-center mb-4">
+                <div className="p-3 rounded-2xl" style={{ background: "#ffffff" }}>
+                  <img src={mfaQR} alt="QR Code" className="w-[180px] h-[180px]"/>
+                </div>
+              </div>
+
+              {/* Secret key */}
+              <div className="mb-5">
+                <p className="text-[11px] font-semibold mb-1.5 tracking-wide" style={{ color: "var(--text-4)" }}>OR ENTER THIS CODE MANUALLY</p>
+                <div className="flex items-center gap-2 rounded-xl px-4 py-3" style={{ background: "var(--surface-3)", border: "1px solid var(--border)" }}>
+                  <code className="flex-1 text-[13px] font-mono font-bold tracking-wider" style={{ color: "var(--primary)", wordBreak: "break-all" }}>{mfaSecret}</code>
+                  <button onClick={() => { navigator.clipboard.writeText(mfaSecret); }} className="w-8 h-8 rounded-lg flex items-center justify-center tr hover:bg-[var(--primary-muted)]" style={{ color: "var(--primary)" }}><span className="material-symbols-rounded" style={{ fontSize: 18 }}>content_copy</span></button>
+                </div>
+              </div>
+
+              {/* Verify code */}
+              <div className="mb-4">
+                <p className="text-[12px] font-semibold mb-2 tracking-wide" style={{ color: "var(--text-3)" }}>ENTER 6-DIGIT CODE TO VERIFY</p>
+                <input type="text" inputMode="numeric" maxLength={6} value={mfaVerifyCode} onChange={e => { if (/^\d*$/.test(e.target.value)) setMfaVerifyCode(e.target.value); }} placeholder="000000" className="w-full rounded-xl px-4 py-3.5 text-[20px] font-bold tracking-[0.3em] text-center focus:outline-none tr" style={{ background: "var(--surface-3)", color: "var(--text-1)", border: "1.5px solid var(--border)", letterSpacing: "0.3em" }} onFocus={e => e.target.style.borderColor = "var(--border-focus)"} onBlur={e => e.target.style.borderColor = "var(--border)"} onKeyDown={e => e.key === "Enter" && verify2FAEnrollment()}/>
+              </div>
+
+              <button onClick={verify2FAEnrollment} disabled={mfaVerifyCode.length !== 6} className="w-full font-bold py-3 rounded-xl text-[14px] flex items-center justify-center gap-2 tr disabled:opacity-40" style={{ background: "var(--primary)", color: "var(--primary-text)" }}><span className="material-symbols-rounded" style={{ fontSize: 18 }}>verified_user</span>Verify & Enable</button>
+            </div>}
+
+            {/* State: Enabled */}
+            {mfa2FAState === "enabled" && <div className="text-center py-4">
+              <div className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4" style={{ background: "var(--primary-muted)" }}><span className="material-symbols-rounded" style={{ fontSize: 32, color: "var(--primary)", fontVariationSettings: "'FILL' 1" }}>verified_user</span></div>
+              <p className="text-[15px] font-bold mb-1" style={{ color: "var(--text-1)" }}>2FA is enabled</p>
+              <p className="text-[13px] mb-6" style={{ color: "var(--text-3)" }}>Your account is protected with two-factor authentication</p>
+              <button onClick={disable2FA} className="w-full font-bold py-3 rounded-xl text-[14px] flex items-center justify-center gap-2 tr" style={{ background: "var(--danger-muted)", color: "var(--danger)" }}><span className="material-symbols-rounded" style={{ fontSize: 18 }}>shield</span>Disable 2FA</button>
+            </div>}
+          </div>
+        </div>
+      </div>}
 
       {/* ▓▓ Fixed Message Menu ▓▓ */}
       {msgMenuId && msgMenuPos && (() => {
