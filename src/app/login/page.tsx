@@ -17,6 +17,7 @@ export default function LoginPage() {
   const [factorId, setFactorId] = useState("");
   const [mfaCode, setMfaCode] = useState(["","","","","",""]);
   const mfaRefs = useRef<(HTMLInputElement|null)[]>([]);
+  const checkingMfa = useRef(false);
 
   useEffect(() => { setMounted(true); }, []);
   useEffect(() => {
@@ -26,14 +27,19 @@ export default function LoginPage() {
   }, []);
 
   const hasSession = typeof window !== "undefined" && Object.keys(localStorage).some(k => k.startsWith("sb-"));
-  if (!loading && user && hasSession) { window.location.href = "/"; return null; }
+  // Don't redirect if MFA check is in progress or MFA code screen is showing
+  if (!loading && user && hasSession && !checkingMfa.current && !mfaStep) { window.location.href = "/"; return null; }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!email || !password) { setError("Email and password required"); return; }
     setError(""); setBusy(true);
+    
+    // Block auto-redirect while we check MFA
+    checkingMfa.current = true;
+    
     const { error: err } = await signIn(email.trim(), password);
-    if (err) { setError(err); setBusy(false); return; }
+    if (err) { setError(err); setBusy(false); checkingMfa.current = false; return; }
 
     // Check if user has MFA enrolled
     if (supabase) {
@@ -44,12 +50,14 @@ export default function LoginPage() {
           setFactorId(totp.id);
           setMfaStep(true);
           setBusy(false);
+          checkingMfa.current = false;
           setTimeout(() => mfaRefs.current[0]?.focus(), 100);
           return;
         }
-      } catch { /* no MFA — continue */ }
+      } catch { /* no MFA */ }
     }
 
+    checkingMfa.current = false;
     window.location.href = "/";
   }
 
