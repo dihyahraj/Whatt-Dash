@@ -25,7 +25,7 @@ const s = {
 };
 
 export default function Dashboard() {
-  const { user, loading: authLoading, signOut, supabase, verifyMfa } = useAuth();
+  const { user, loading: authLoading, signOut, supabase } = useAuth();
   const router = useRouter();
 
   /* ═══ THEME ═══ */

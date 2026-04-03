@@ -10,45 +10,23 @@ interface AuthUser {
   role: "admin" | "user";
 }
 
-interface MfaResult {
-  error?: string;
-  needsMfa?: boolean;
-  factorId?: string;
-}
-
 interface AuthCtx {
   user: AuthUser | null;
   supabase: SupabaseClient | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<MfaResult>;
-  verifyMfa: (factorId: string, code: string) => Promise<{ error?: string }>;
+  signIn: (email: string, password: string) => Promise<{ error?: string }>;
   signOut: () => void;
 }
 
 const AuthContext = createContext<AuthCtx>({
   user: null, supabase: null, loading: true,
-  signIn: async () => ({}), verifyMfa: async () => ({}), signOut: () => {},
+  signIn: async () => ({}), signOut: () => {},
 });
 
 export function useAuth() { return useContext(AuthContext); }
 
 async function serverCheckAllowed(email: string): Promise<{ allowed: boolean; display_name?: string; role?: string }> {
   try { const r = await fetch("/api/auth/check", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) }); return await r.json(); } catch { return { allowed: false }; }
-}
-
-// Safe MFA check — returns null if MFA APIs not available or error
-async function safeMfaCheck(sb: SupabaseClient): Promise<{ needsMfa: boolean; factorId?: string }> {
-  try {
-    const { data: aal } = await sb.auth.mfa.getAuthenticatorAssuranceLevel();
-    if (aal && aal.currentLevel === "aal1" && aal.nextLevel === "aal2") {
-      const { data: factors } = await sb.auth.mfa.listFactors();
-      const totp = factors?.totp?.find(f => f.status === "verified");
-      if (totp) return { needsMfa: true, factorId: totp.id };
-    }
-  } catch (e) {
-    console.warn("MFA check skipped:", e);
-  }
-  return { needsMfa: false };
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -64,22 +42,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { id: authUser.id, email: authUser.email || "", display_name: check.display_name || authUser.email?.split("@")[0] || "User", role: (check.role as "admin" | "user") || "user" };
   }, []);
 
+  // Restore session on mount
   useEffect(() => {
     if (!supabase) { setLoading(false); return; }
     const sb = supabase;
     let cancelled = false;
+
     async function init() {
       try {
         const { data: { session } } = await sb.auth.getSession();
         if (cancelled) return;
         if (session?.user) {
-          // Safe MFA check — won't hang if MFA not available
-          const mfa = await safeMfaCheck(sb);
-          if (mfa.needsMfa) {
-            // MFA enrolled but not verified — don't set user, login page will handle
-            if (!cancelled) setLoading(false);
-            return;
-          }
           const resolved = await resolveUser(session.user);
           if (cancelled) return;
           if (resolved) setUser(resolved);
@@ -88,60 +61,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch (e) { console.error("Auth init:", e); }
       if (!cancelled) setLoading(false);
     }
+
     init();
     const timeout = setTimeout(() => { if (!cancelled) setLoading(false); }, 5000);
+
     const { data: { subscription } } = sb.auth.onAuthStateChange(async (event, session) => {
       if (loggingOut) return;
       if (event === "SIGNED_OUT") { setUser(null); return; }
       if (session?.user) {
-        try {
-          const mfa = await safeMfaCheck(sb);
-          if (mfa.needsMfa) return; // Needs MFA verification
-        } catch { /* ignore */ }
         const resolved = await resolveUser(session.user);
         setUser(resolved);
       }
     });
+
     return () => { cancelled = true; clearTimeout(timeout); subscription.unsubscribe(); };
   }, [supabase, resolveUser]);
 
-  async function signIn(email: string, password: string): Promise<MfaResult> {
+  async function signIn(email: string, password: string): Promise<{ error?: string }> {
     if (!supabase) return { error: "Supabase not configured" };
+
     const check = await serverCheckAllowed(email.toLowerCase().trim());
     if (!check.allowed) return { error: "Access denied. Email not authorized." };
+
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) return { error: "Invalid email or password." };
-    if (!data.user) return { error: "Login failed." };
 
-    // Safe MFA check
-    const mfa = await safeMfaCheck(supabase);
-    if (mfa.needsMfa && mfa.factorId) {
-      return { needsMfa: true, factorId: mfa.factorId };
-    }
-
-    // No MFA — resolve user directly
-    const resolved = await resolveUser(data.user);
-    if (resolved) { setUser(resolved); return {}; }
-    return { error: "Access denied." };
-  }
-
-  async function verifyMfa(factorId: string, code: string): Promise<{ error?: string }> {
-    if (!supabase) return { error: "Supabase not configured" };
-    try {
-      const { data: challenge, error: cErr } = await supabase.auth.mfa.challenge({ factorId });
-      if (cErr || !challenge) return { error: "Failed to create MFA challenge." };
-      const { error: vErr } = await supabase.auth.mfa.verify({ factorId, challengeId: challenge.id, code });
-      if (vErr) return { error: "Invalid code. Please try again." };
-
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-      if (authUser) {
-        const resolved = await resolveUser(authUser);
-        if (resolved) { setUser(resolved); return {}; }
-      }
+    if (data.user) {
+      const resolved = await resolveUser(data.user);
+      if (resolved) { setUser(resolved); return {}; }
       return { error: "Access denied." };
-    } catch (e) {
-      return { error: "MFA verification failed: " + String(e) };
     }
+    return { error: "Login failed." };
   }
 
   function signOut() {
@@ -153,7 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, supabase, loading, signIn, verifyMfa, signOut }}>
+    <AuthContext.Provider value={{ user, supabase, loading, signIn, signOut }}>
       {children}
     </AuthContext.Provider>
   );
