@@ -426,9 +426,9 @@ export default function Dashboard() {
   function aclr(id: string) { const c = ["from-emerald-500 to-teal-700","from-blue-500 to-indigo-700","from-purple-500 to-violet-700","from-orange-500 to-red-700","from-pink-500 to-rose-700","from-cyan-500 to-blue-700","from-amber-500 to-orange-700","from-lime-500 to-green-700"]; let h = 0; for (let i = 0; i < id.length; i++) h = id.charCodeAt(i) + ((h << 5) - h); return c[Math.abs(h) % c.length]; }
   function lmp(c: ConversationWithLastMessage) { const p = c.last_message_role === "assistant" ? "✓ " : ""; const ic: Partial<Record<MessageType, string>> = { image: "📷 Photo", video: "🎥 Video", audio: "🎵 Audio", document: "📄 Document", sticker: "🏷️ Sticker", location: "📍 Location", contacts: "📇 Contact" }; if (c.last_message_type && c.last_message_type !== "text" && ic[c.last_message_type]) return p + ic[c.last_message_type]; return p + (c.last_message || ""); }
   function si(s: string) {
-    if (s === "sent") return <svg width="16" height="11" viewBox="0 0 16 11" fill="none" className="inline ml-1"><path d="M11 1L4.5 8.5L1 5.5" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>;
-    if (s === "delivered") return <svg width="20" height="11" viewBox="0 0 20 11" fill="none" className="inline ml-1"><path d="M7 1L1.5 7.5" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" strokeLinecap="round"/><path d="M14 1L7.5 8.5L5 6" stroke="rgba(255,255,255,0.4)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>;
-    if (s === "read") return <svg width="20" height="11" viewBox="0 0 20 11" fill="none" className="inline ml-1"><path d="M7 1L1.5 7.5" stroke="#53bdeb" strokeWidth="1.5" strokeLinecap="round"/><path d="M14 1L7.5 8.5L5 6" stroke="#53bdeb" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>;
+    if (s === "sent") return <span className="material-symbols-rounded inline ml-1 text-white/40" style={{ fontSize: 14 }}>check</span>;
+    if (s === "delivered") return <span className="material-symbols-rounded inline ml-1 text-white/40" style={{ fontSize: 14 }}>done_all</span>;
+    if (s === "read") return <span className="material-symbols-rounded inline ml-1 text-[#53bdeb]" style={{ fontSize: 14 }}>done_all</span>;
     return null;
   }
   function dl(d: string) { const t = new Date(d), n = new Date(); if (t.toDateString() === n.toDateString()) return "Today"; const y = new Date(n); y.setDate(y.getDate()-1); if (t.toDateString() === y.toDateString()) return "Yesterday"; return t.toLocaleDateString([], { weekday: "long", month: "long", day: "numeric", year: "numeric" }); }
@@ -453,7 +453,7 @@ export default function Dashboard() {
       case "image": return (<div>{msg.media_url && <img src={msg.media_url} alt="Photo" className="rounded-md max-w-[260px] max-h-[300px] object-cover cursor-pointer hover:brightness-90 transition" onClick={() => setImgPreview(msg.media_url)}/>}{msg.media_caption && msg.media_caption !== "[image]" && <p className="text-[13px] mt-1.5 whitespace-pre-wrap select-text cursor-text">{msg.media_caption}</p>}</div>);
       case "video": return (<div>{msg.media_url ? <video controls className="rounded-md max-w-[260px]" preload="metadata"><source src={msg.media_url} type={msg.media_mime_type || "video/mp4"}/></video> : <span className="text-[13px]">🎥 Video</span>}{msg.media_caption && <p className="text-[13px] mt-1.5 select-text cursor-text">{msg.media_caption}</p>}</div>);
       case "audio": return msg.media_url ? <audio controls className="max-w-[240px]" preload="metadata"><source src={msg.media_url} type={msg.media_mime_type || "audio/ogg"}/></audio> : <div className="flex items-center gap-2 text-[13px] text-white/60"><div className="w-3 h-3 rounded-full bg-emerald-400 animate-pulse"/><span>Sending voice...</span></div>;
-      case "document": return (<a href={msg.media_url || "#"} target="_blank" rel="noreferrer" className="flex items-center gap-2.5 bg-white/[0.06] hover:bg-white/[0.10] transition rounded-lg p-3 min-w-[200px]"><div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center flex-shrink-0 text-xl">📄</div><div className="flex-1 min-w-0"><p className="text-[13px] font-medium truncate text-white">{msg.media_filename || "Document"}</p><p className="text-[11px] text-white/40 mt-0.5">{msg.media_mime_type || "File"} • Tap to open</p></div><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" className="flex-shrink-0 opacity-50"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></a>);
+      case "document": return (<a href={msg.media_url || "#"} target="_blank" rel="noreferrer" className="flex items-center gap-2.5 bg-white/[0.06] hover:bg-white/[0.10] transition rounded-lg p-3 min-w-[200px]"><div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center flex-shrink-0 text-xl"><span className="material-symbols-rounded text-white/70" style={{ fontSize: 22 }}>description</span></div><div className="flex-1 min-w-0"><p className="text-[13px] font-medium truncate text-white">{msg.media_filename || "Document"}</p><p className="text-[11px] text-white/40 mt-0.5">{msg.media_mime_type || "File"} • Tap to open</p></div><span className="material-symbols-rounded text-white/50 flex-shrink-0" style={{ fontSize: 18 }}>open_in_new</span></a>);
       case "sticker": return msg.media_url ? <img src={msg.media_url} alt="" className="w-[120px] h-[120px] object-contain"/> : <span className="text-4xl">🏷️</span>;
       case "location": return (<a href={`https://maps.google.com/?q=${msg.latitude},${msg.longitude}`} target="_blank" rel="noreferrer" className="block bg-white/[0.06] hover:bg-white/[0.10] transition rounded-lg p-3 min-w-[180px]"><p className="text-[13px] font-medium">📍 {msg.location_name || "Location"}</p>{msg.location_address && <p className="text-[11px] text-white/40 mt-0.5">{msg.location_address}</p>}<p className="text-[11px] text-emerald-400 mt-1">Open in Maps →</p></a>);
       default: return <p className="text-[13px] whitespace-pre-wrap break-words leading-[1.45] select-text cursor-text">{msg.content}</p>;
@@ -465,13 +465,13 @@ export default function Dashboard() {
     const labelsOpen = chatLabelOpen === convo.id;
     return (
       <div className="absolute right-2 top-full mt-1 z-[100] bg-[#233138] rounded-xl shadow-2xl py-1.5 min-w-[190px] border border-white/[0.1]" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
-        <MI i="📌" l={convo.is_pinned ? "Unpin chat" : "Pin chat"} o={() => { act(`/api/conversations/${convo.id}/pin`, { pinned: !convo.is_pinned }); onClose(); }}/>
-        <MI i={convo.is_muted ? "🔔" : "🔕"} l={convo.is_muted ? "Unmute" : "Mute"} o={() => { act(`/api/conversations/${convo.id}/mute`, { muted: !convo.is_muted }); onClose(); }}/>
-        <MI i="📩" l="Mark as unread" o={() => { act(`/api/conversations/${convo.id}/unread`, { unread_count: 1 }); onClose(); }}/>
-        <MI i="💾" l="Save contact" o={() => { saveContact(convo.id); onClose(); }}/>
+        <MI i="push_pin" l={convo.is_pinned ? "Unpin chat" : "Pin chat"} o={() => { act(`/api/conversations/${convo.id}/pin`, { pinned: !convo.is_pinned }); onClose(); }}/>
+        <MI i={convo.is_muted ? "notifications_active" : "notifications_off"} l={convo.is_muted ? "Unmute" : "Mute"} o={() => { act(`/api/conversations/${convo.id}/mute`, { muted: !convo.is_muted }); onClose(); }}/>
+        <MI i="mark_email_unread" l="Mark as unread" o={() => { act(`/api/conversations/${convo.id}/unread`, { unread_count: 1 }); onClose(); }}/>
+        <MI i="contact_page" l="Save contact" o={() => { saveContact(convo.id); onClose(); }}/>
         <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setChatLabelOpen(labelsOpen ? null : convo.id); }} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-[13px] text-white/85 hover:bg-white/[0.06]">
-          <span className="w-5 text-center">🏷️</span><span>Labels</span>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`ml-auto transition-transform ${labelsOpen ? "rotate-180" : ""}`}><path d="M6 9l6 6 6-6"/></svg>
+          <span className="material-symbols-rounded" style={{ fontSize: 18 }}>label</span><span>Labels</span>
+          <span className={`material-symbols-rounded transition-transform ${labelsOpen ? "rotate-180" : ""}`} style={{ fontSize: 14, marginLeft: "auto" }}>expand_more</span>
         </button>
         {labelsOpen && (
           <div className="px-2 py-1.5 border-t border-white/[0.06]" onClick={(e) => e.stopPropagation()}>
@@ -487,17 +487,17 @@ export default function Dashboard() {
             {labels.length === 0 && <p className="text-[11px] text-white/30 px-2 py-1">No labels yet</p>}
           </div>
         )}
-        <MI i="📦" l="Archive" o={() => { act(`/api/conversations/${convo.id}/archive`, { archived: true }); onClose(); }}/>
+        <MI i="archive" l="Archive" o={() => { act(`/api/conversations/${convo.id}/archive`, { archived: true }); onClose(); }}/>
         {user?.role === "admin" && <>
           <div className="h-px bg-white/[0.06] my-1"/>
-          <MI i="🗑️" l="Delete chat" o={() => { delChat(convo.id); onClose(); }} d/>
+          <MI i="delete" l="Delete chat" o={() => { delChat(convo.id); onClose(); }} d/>
         </>}
       </div>
     );
   }
 
   if (authLoading) return (
-    <div className="min-h-screen bg-[#0b141a] flex items-center justify-center">
+    <div className="min-h-screen bg-[#0f1419] flex items-center justify-center">
       <div className="animate-spin w-8 h-8 border-2 border-emerald-500 border-t-transparent rounded-full"/>
     </div>
   );
@@ -505,43 +505,43 @@ export default function Dashboard() {
   if (!user) {
     window.location.href = "/login";
     return (
-      <div className="min-h-screen bg-[#0b141a] flex items-center justify-center">
+      <div className="min-h-screen bg-[#0f1419] flex items-center justify-center">
         <p className="text-white/30 text-sm">Redirecting...</p>
       </div>
     );
   }
 
   return (
-    <div className="flex h-screen bg-[#0b0b0b] overflow-hidden select-none" style={{ fontFamily: "'Segoe UI', Helvetica, Arial, sans-serif" }}>
+    <div className="flex h-screen bg-[#0f1419] overflow-hidden select-none" style={{ fontFamily: "'Inter', system-ui, sans-serif" }}>
 
       {/* ═══ SIDEBAR ═══ */}
-      <div className="w-[340px] flex flex-col border-r border-white/[0.06] flex-shrink-0" style={{ background: "#111" }}>
+      <div className="w-[340px] flex flex-col border-r border-white/[0.06] flex-shrink-0" style={{ background: "#141c24" }}>
         <div className="px-4 pt-3.5 pb-2.5 border-b border-white/[0.06]">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.625.846 5.059 2.284 7.034L.789 23.492a.5.5 0 00.632.632l4.458-1.495A11.952 11.952 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 22c-2.379 0-4.588-.813-6.334-2.176l-.442-.352-3.17 1.063 1.063-3.17-.352-.442A9.956 9.956 0 012 12C2 6.477 6.477 2 12 2s10 4.477 10 10-4.477 10-10 10z"/></svg>
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-400 to-emerald-600 flex items-center justify-center">
+                <span className="material-symbols-rounded text-white" style={{ fontSize: 20, fontVariationSettings: "'FILL' 1" }}>chat</span>
               </div>
-              <div><h1 className="text-[14px] font-bold text-white">Whatt Dash</h1><p className="text-[11px] text-white/35">{user.display_name} • {convos.length} chat{convos.length !== 1 ? "s" : ""}</p></div>
+              <div><h1 className="text-[14px] font-semibold text-white tracking-tight">Whatt Dash</h1><p className="text-[11px] text-white/35 font-medium">{user.display_name} • {convos.length} chat{convos.length !== 1 ? "s" : ""}</p></div>
             </div>
             <div className="flex items-center gap-0.5">
               {user?.role === "admin" && (
-                <button onClick={() => router.push("/admin")} className="w-8 h-8 rounded-full hover:bg-white/[0.06] flex items-center justify-center text-white/40 hover:text-white/70" title="Manage Users">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                <button onClick={() => router.push("/admin")} className="w-8 h-8 rounded-lg hover:bg-white/[0.06] flex items-center justify-center text-white/40 hover:text-white/70 transition-colors" title="Manage Users">
+                  <span className="material-symbols-rounded" style={{ fontSize: 18 }}>group</span>
                 </button>
               )}
-              <button onClick={() => setShowSearch(!showSearch)} className="w-8 h-8 rounded-full hover:bg-white/[0.06] flex items-center justify-center text-white/40 hover:text-white/70"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></button>
+              <button onClick={() => setShowSearch(!showSearch)} className="w-8 h-8 rounded-lg hover:bg-white/[0.06] flex items-center justify-center text-white/40 hover:text-white/70 transition-colors"><span className="material-symbols-rounded" style={{ fontSize: 18 }}>search</span></button>
               {user?.role === "admin" && (
-                <button onClick={downloadContactsCsv} className="w-8 h-8 rounded-full hover:bg-white/[0.06] flex items-center justify-center text-white/40 hover:text-white/70" title="Download Contacts CSV">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                <button onClick={downloadContactsCsv} className="w-8 h-8 rounded-lg hover:bg-white/[0.06] flex items-center justify-center text-white/40 hover:text-white/70 transition-colors" title="Download Contacts CSV">
+                  <span className="material-symbols-rounded" style={{ fontSize: 18 }}>download</span>
                 </button>
               )}
-              <button onClick={signOut} className="w-8 h-8 rounded-full hover:bg-white/[0.06] flex items-center justify-center text-white/40 hover:text-red-400" title="Sign Out">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+              <button onClick={signOut} className="w-8 h-8 rounded-lg hover:bg-white/[0.06] flex items-center justify-center text-white/40 hover:text-red-400 transition-colors" title="Sign Out">
+                <span className="material-symbols-rounded" style={{ fontSize: 18 }}>logout</span>
               </button>
             </div>
           </div>
-          {showSearch && <div className="relative mt-2.5"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2" className="absolute left-3 top-1/2 -translate-y-1/2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search chats..." className="w-full bg-white/[0.05] rounded-lg pl-9 pr-3 py-2 text-[13px] text-white placeholder:text-white/25 focus:outline-none border border-white/[0.06]" autoFocus/></div>}
+          {showSearch && <div className="relative mt-2.5"><span className="material-symbols-rounded absolute left-3 top-1/2 -translate-y-1/2 text-white/30" style={{ fontSize: 16 }}>search</span><input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search chats..." className="w-full bg-white/[0.05] rounded-xl pl-9 pr-3 py-2 text-[13px] text-white placeholder:text-white/25 focus:outline-none border border-white/[0.06] focus:border-emerald-500/30 transition-colors" autoFocus/></div>}
         </div>
 
         {/* Filter Tabs */}
@@ -561,9 +561,9 @@ export default function Dashboard() {
           {filtered.map((c) => {
             const isSel = selId === c.id;
             return (
-              <div key={c.id} className={`relative ${isSel ? "bg-[#2a3942]" : "hover:bg-white/[0.03]"}`}>
+              <div key={c.id} className={`relative ${isSel ? "bg-[#202d3a]" : "hover:bg-white/[0.03]"}`}>
                 <div className="flex items-center px-3 py-3 cursor-pointer" onClick={() => { setSelId(c.id); setChatMenuId(null); }}>
-                  <div className={`w-[48px] h-[48px] rounded-full bg-gradient-to-br ${aclr(c.id)} flex items-center justify-center flex-shrink-0 text-white text-[14px] font-bold`}>{ini(c.name, c.phone)}</div>
+                  <div className={`w-[48px] h-[48px] rounded-xl bg-gradient-to-br ${aclr(c.id)} flex items-center justify-center flex-shrink-0 text-white text-[14px] font-bold`}>{ini(c.name, c.phone)}</div>
                   <div className="flex-1 min-w-0 ml-3">
                     <div className="flex items-center justify-between">
                       <span className={`text-[14px] truncate ${c.unread_count > 0 ? "font-bold text-white" : "font-medium text-white/80"}`}>{c.name || c.phone}</span>
@@ -587,7 +587,7 @@ export default function Dashboard() {
                       onClick={(e) => { e.stopPropagation(); setChatMenuId(chatMenuId === c.id ? null : c.id); setMsgMenuId(null); setHeaderMenu(false); }}
                       className="w-7 h-7 rounded-full hover:bg-white/[0.12] flex items-center justify-center text-white/30 hover:text-white/60"
                     >
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+                      <span className="material-symbols-rounded" style={{ fontSize: 18 }}>more_vert</span>
                     </button>
                     {chatMenuId === c.id && <ChatMenu convo={c} onClose={() => setChatMenuId(null)}/>}
                   </div>
@@ -602,11 +602,11 @@ export default function Dashboard() {
               <button onClick={async () => { setShowArchived(!showArchived); if (!showArchived) { try { const r = await fetch("/api/conversations/archived"); const d = await r.json(); if (Array.isArray(d)) setArchived(d); } catch {} } }} className="w-full flex items-center gap-3 px-4 py-3 text-white/50 hover:bg-white/[0.03]">
                 <span>📦</span>
                 <span className="text-[13px] font-medium">Archived ({archived.length})</span>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`ml-auto transition-transform ${showArchived ? "rotate-180" : ""}`}><path d="M6 9l6 6 6-6"/></svg>
+                <span className={`material-symbols-rounded transition-transform ${showArchived ? "rotate-180" : ""}`} style={{ fontSize: 16, marginLeft: "auto" }}>expand_more</span>
               </button>
               {showArchived && archived.map((ac) => (
                 <div key={ac.id} className="flex items-center px-3 py-2.5 hover:bg-white/[0.03]">
-                  <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${aclr(ac.id)} flex items-center justify-center flex-shrink-0 text-white text-[12px] font-bold opacity-60`}>{ini(ac.name, ac.phone)}</div>
+                  <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${aclr(ac.id)} flex items-center justify-center flex-shrink-0 text-white text-[12px] font-bold opacity-60`}>{ini(ac.name, ac.phone)}</div>
                   <div className="flex-1 min-w-0 ml-3 cursor-pointer" onClick={() => setSelId(ac.id)}>
                     <span className="text-[13px] text-white/50 truncate block">{ac.name || ac.phone}</span>
                     <p className="text-[11px] text-white/30 truncate">{lmp(ac)}</p>
@@ -625,7 +625,7 @@ export default function Dashboard() {
             <div className="px-4 py-2.5">
               <p className="text-[11px] text-white/30 font-medium mb-2">MANAGE LABELS</p>
               <div className="flex gap-1.5 mb-2">
-                <input type="text" value={newLabelName} onChange={(e) => setNewLabelName(e.target.value)} placeholder="New label..." onKeyDown={(e) => e.key === "Enter" && createLabel()} className="flex-1 bg-[#2a3942] rounded px-2.5 py-1.5 text-[12px] text-white placeholder:text-white/25 focus:outline-none border border-white/[0.06] min-w-0"/>
+                <input type="text" value={newLabelName} onChange={(e) => setNewLabelName(e.target.value)} placeholder="New label..." onKeyDown={(e) => e.key === "Enter" && createLabel()} className="flex-1 bg-[#202d3a] rounded px-2.5 py-1.5 text-[12px] text-white placeholder:text-white/25 focus:outline-none border border-white/[0.06] min-w-0"/>
                 <input type="color" value={newLabelColor} onChange={(e) => setNewLabelColor(e.target.value)} className="w-7 h-7 rounded cursor-pointer bg-transparent border-0 p-0"/>
                 <button onClick={createLabel} disabled={!newLabelName.trim()} className="px-2.5 py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-30 rounded text-[11px] text-white font-medium flex-shrink-0">+</button>
               </div>
@@ -644,33 +644,33 @@ export default function Dashboard() {
       {/* ═══ CHAT ═══ */}
       <div className="flex-1 flex flex-col min-w-0">
         {!sel ? (
-          <div className="flex-1 flex flex-col items-center justify-center gap-4" style={{ background: "radial-gradient(ellipse at center, rgba(16,185,129,0.03) 0%, #0b0b0b 70%)" }}>
-            <div className="w-20 h-20 rounded-3xl bg-white/[0.03] flex items-center justify-center border border-white/[0.06]"><svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.12)" strokeWidth="1.2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
-            <p className="text-[14px] text-white/20">Select a chat</p>
+          <div className="flex-1 flex flex-col items-center justify-center gap-4" style={{ background: "radial-gradient(ellipse at center, rgba(52,211,153,0.03) 0%, #0f1419 70%)" }}>
+            <div className="w-20 h-20 rounded-3xl bg-white/[0.03] flex items-center justify-center border border-white/[0.06]"><span className="material-symbols-rounded text-white/12" style={{ fontSize: 36 }}>chat_bubble</span></div>
+            <p className="text-[14px] text-white/20 font-medium">Select a chat</p>
           </div>
         ) : (
           <>
             {/* Header */}
-            <div className="px-4 py-2.5 border-b border-white/[0.06] flex items-center justify-between" style={{ background: "#202c33" }}>
+            <div className="px-4 py-2.5 border-b border-white/[0.06] flex items-center justify-between" style={{ background: "#1a2530" }}>
               <div className="flex items-center gap-3 cursor-pointer">
-                <div className={`w-10 h-10 rounded-full bg-gradient-to-br ${aclr(sel.id)} flex items-center justify-center text-white text-sm font-bold`}>{ini(sel.name, sel.phone)}</div>
-                <div><h2 className="text-[14px] font-semibold text-white">{sel.name || sel.phone}</h2><p className="text-[11px] text-white/40 font-mono">{sel.phone}</p></div>
+                <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${aclr(sel.id)} flex items-center justify-center text-white text-sm font-bold`}>{ini(sel.name, sel.phone)}</div>
+                <div><h2 className="text-[14px] font-semibold text-white tracking-tight">{sel.name || sel.phone}</h2><p className="text-[11px] text-white/40 font-mono">{sel.phone}</p></div>
               </div>
               <div className="flex items-center gap-1">
-                <button onClick={() => { setShowChatSearch(!showChatSearch); setChatSearch(""); }} className="w-9 h-9 rounded-full hover:bg-white/[0.08] flex items-center justify-center text-white/40"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></button>
+                <button onClick={() => { setShowChatSearch(!showChatSearch); setChatSearch(""); }} className="w-9 h-9 rounded-lg hover:bg-white/[0.08] flex items-center justify-center text-white/40 transition-colors"><span className="material-symbols-rounded" style={{ fontSize: 20 }}>search</span></button>
                 <div className="relative">
-                  <button onClick={(e) => { e.stopPropagation(); setHeaderMenu(!headerMenu); setChatMenuId(null); setMsgMenuId(null); }} className="w-9 h-9 rounded-full hover:bg-white/[0.08] flex items-center justify-center text-white/40">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>
+                  <button onClick={(e) => { e.stopPropagation(); setHeaderMenu(!headerMenu); setChatMenuId(null); setMsgMenuId(null); }} className="w-9 h-9 rounded-lg hover:bg-white/[0.08] flex items-center justify-center text-white/40 transition-colors">
+                    <span className="material-symbols-rounded" style={{ fontSize: 20 }}>more_vert</span>
                   </button>
                   {headerMenu && (
-                    <div className="absolute right-0 top-full mt-1 z-[100] bg-[#233138] rounded-xl shadow-2xl py-1.5 min-w-[200px] border border-white/[0.1]" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
-                      <MI i="📌" l={sel.is_pinned ? "Unpin chat" : "Pin chat"} o={() => act(`/api/conversations/${sel.id}/pin`, { pinned: !sel.is_pinned })}/>
-                      <MI i={sel.is_muted ? "🔔" : "🔕"} l={sel.is_muted ? "Unmute" : "Mute"} o={() => act(`/api/conversations/${sel.id}/mute`, { muted: !sel.is_muted })}/>
-                      <MI i="📩" l="Mark as unread" o={() => act(`/api/conversations/${sel.id}/unread`, { unread_count: 1 })}/>
-                      <MI i="💾" l="Save contact" o={() => { saveContact(sel.id); setHeaderMenu(false); }}/>
+                    <div className="absolute right-0 top-full mt-1 z-[100] bg-[#1e2d3a] rounded-2xl elevation-3 py-2 min-w-[200px] border border-white/[0.08] animate-scale-in" onClick={(e) => e.stopPropagation()} onMouseDown={(e) => e.stopPropagation()}>
+                      <MI i="push_pin" l={sel.is_pinned ? "Unpin chat" : "Pin chat"} o={() => act(`/api/conversations/${sel.id}/pin`, { pinned: !sel.is_pinned })}/>
+                      <MI i={sel.is_muted ? "notifications_active" : "notifications_off"} l={sel.is_muted ? "Unmute" : "Mute"} o={() => act(`/api/conversations/${sel.id}/mute`, { muted: !sel.is_muted })}/>
+                      <MI i="mark_email_unread" l="Mark as unread" o={() => act(`/api/conversations/${sel.id}/unread`, { unread_count: 1 })}/>
+                      <MI i="contact_page" l="Save contact" o={() => { saveContact(sel.id); setHeaderMenu(false); }}/>
                       <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowLabelMenu(showLabelMenu === sel.id ? null : sel.id); }} className="w-full flex items-center gap-2.5 px-4 py-2.5 text-[13px] text-white/85 hover:bg-white/[0.06]">
-                        <span className="w-5 text-center">🏷️</span><span>Labels</span>
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className={`ml-auto transition-transform ${showLabelMenu === sel.id ? "rotate-180" : ""}`}><path d="M6 9l6 6 6-6"/></svg>
+                        <span className="material-symbols-rounded" style={{ fontSize: 18 }}>label</span><span>Labels</span>
+                        <span className={`material-symbols-rounded transition-transform ${showLabelMenu === sel.id ? "rotate-180" : ""}`} style={{ fontSize: 14, marginLeft: "auto" }}>expand_more</span>
                       </button>
                       {showLabelMenu === sel.id && (
                         <div className="px-2 py-1.5 border-t border-white/[0.06]" onClick={(e) => e.stopPropagation()}>
@@ -685,10 +685,10 @@ export default function Dashboard() {
                           })}
                         </div>
                       )}
-                      <MI i="📦" l="Archive" o={() => { act(`/api/conversations/${sel.id}/archive`, { archived: true }); if (selId === sel.id) { setSelId(null); setMsgs([]); } }}/>
+                      <MI i="archive" l="Archive" o={() => { act(`/api/conversations/${sel.id}/archive`, { archived: true }); if (selId === sel.id) { setSelId(null); setMsgs([]); } }}/>
                       {user?.role === "admin" && <>
                         <div className="h-px bg-white/[0.06] my-1"/>
-                        <MI i="🗑️" l="Delete chat" o={() => delChat(sel.id)} d/>
+                        <MI i="delete" l="Delete chat" o={() => delChat(sel.id)} d/>
                       </>}
                     </div>
                   )}
@@ -698,31 +698,31 @@ export default function Dashboard() {
 
             {/* Chat search bar */}
             {showChatSearch && (
-              <div className="px-4 py-2 border-b border-white/[0.06] flex items-center gap-2" style={{ background: "#1a2028" }}>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <div className="px-4 py-2 border-b border-white/[0.06] flex items-center gap-2" style={{ background: "#162028" }}>
+                <span className="material-symbols-rounded text-white/30" style={{ fontSize: 16 }}>search</span>
                 <input type="text" value={chatSearch} onChange={(e) => setChatSearch(e.target.value)} placeholder="Search in chat..." className="flex-1 bg-transparent text-[13px] text-white placeholder:text-white/25 focus:outline-none" autoFocus/>
                 <button onClick={() => { setShowChatSearch(false); setChatSearch(""); }} className="text-white/30 hover:text-white/60 text-sm">✕</button>
               </div>
             )}
 
             {/* Messages */}
-            <div ref={chatBoxRef} onScroll={handleScroll} className="flex-1 overflow-y-auto px-4 sm:px-16 py-3 relative" style={{ backgroundColor: "#0b141a" }}>
+            <div ref={chatBoxRef} onScroll={handleScroll} className="flex-1 overflow-y-auto px-4 sm:px-16 py-3 relative" style={{ backgroundColor: "#0f1419" }}>
               {displayMsgs.map((msg, i) => {
                 const isMe = msg.role === "assistant";
                 const replied = msg.reply_to_id ? msgs.find((m) => m.id === msg.reply_to_id) : null;
                 return (
                   <div key={msg.id}>
-                    {sd(displayMsgs, i) && <div className="flex justify-center my-3"><span className="px-3 py-1 rounded-md bg-[#182229] text-[11px] text-white/50 shadow">{dl(msg.created_at)}</span></div>}
+                    {sd(displayMsgs, i) && <div className="flex justify-center my-3"><span className="px-3 py-1 rounded-md bg-[#162230] text-[11px] text-white/50 shadow">{dl(msg.created_at)}</span></div>}
                     <div className={`flex ${isMe ? "justify-end" : "justify-start"} ${msg.reaction ? "mb-4" : "mb-[2px]"} group/m`}>
                       <div className={`relative max-w-[65%]`}>
                         {replied && <div className={`px-2.5 py-1.5 rounded-t-lg text-[11px] border-l-[3px] ${isMe ? "bg-[#025144] border-emerald-300/50" : "bg-[#1d282f] border-purple-400/50"}`}><p className="font-semibold text-[10px] text-emerald-300 mb-0.5">{replied.role === "user" ? (sel?.name || sel?.phone) : "You"}</p><p className="truncate text-white/50">{replied.content}</p></div>}
 
-                        <div className={`relative px-2.5 py-1.5 ${msg.message_type === "sticker" ? "bg-transparent" : isMe ? "bg-[#005c4b] rounded-lg rounded-tr-[3px]" : "bg-[#202c33] rounded-lg rounded-tl-[3px]"} ${replied ? "rounded-t-none" : ""}`}>
+                        <div className={`relative px-2.5 py-1.5 ${msg.message_type === "sticker" ? "bg-transparent" : isMe ? "bg-[#0d3b30] rounded-2xl rounded-tr-md" : "bg-[#1e2d3a] rounded-2xl rounded-tl-md"} ${replied ? "rounded-t-none" : ""}`}>
                           {/* Menu button on hover — WhatsApp style */}
                           {!msg.is_deleted && <div className={`absolute right-0 top-0 opacity-0 group-hover/m:opacity-100 z-10`}>
                             <button onClick={(e) => { e.stopPropagation(); setMsgMenuId(msgMenuId === msg.id ? null : msg.id); setChatMenuId(null); setHeaderMenu(false); }}
-                              className={`w-7 h-7 rounded-bl-lg flex items-center justify-center ${isMe ? "bg-[#005c4b] hover:bg-[#04705b]" : "bg-[#202c33] hover:bg-[#28353d]"}`}>
-                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeOpacity="0.6"><path d="M6 9l6 6 6-6"/></svg>
+                              className={`w-7 h-7 rounded-bl-lg flex items-center justify-center ${isMe ? "bg-[#0d3b30] hover:bg-[#0f4538]" : "bg-[#1e2d3a] hover:bg-[#253540]"}`}>
+                              <span className="material-symbols-rounded text-white/60" style={{ fontSize: 16 }}>expand_more</span>
                             </button>
                           </div>}
 
@@ -734,18 +734,18 @@ export default function Dashboard() {
                           </div>
                         </div>
 
-                        {msg.reaction && <div className={`absolute -bottom-2.5 ${isMe ? "right-2" : "left-2"} bg-[#182229] border border-white/[0.08] rounded-full px-1.5 py-0.5 text-[12px] shadow cursor-pointer hover:scale-110 transition group/react`} onClick={(e) => { e.stopPropagation(); reactMsg(msg.id, msg.reaction!); }} title="Click to remove">{msg.reaction}<span className="hidden group-hover/react:inline text-[9px] ml-0.5 text-white/30">✕</span></div>}
+                        {msg.reaction && <div className={`absolute -bottom-2.5 ${isMe ? "right-2" : "left-2"} bg-[#162230] border border-white/[0.08] rounded-full px-1.5 py-0.5 text-[12px] shadow cursor-pointer hover:scale-110 transition group/react`} onClick={(e) => { e.stopPropagation(); reactMsg(msg.id, msg.reaction!); }} title="Click to remove">{msg.reaction}<span className="hidden group-hover/react:inline text-[9px] ml-0.5 text-white/30">✕</span></div>}
 
                         {/* Msg menu */}
                         {msgMenuId === msg.id && (() => {
                           const isNearBottom = i >= displayMsgs.length - 3;
                           return (
-                          <div className={`absolute ${isMe ? "right-0" : "left-0"} ${isNearBottom ? "bottom-8" : "top-8"} z-[100] bg-[#233138] rounded-xl shadow-2xl py-1.5 min-w-[170px] border border-white/[0.1]`} onClick={(e) => e.stopPropagation()}>
-                            <MI i="↩️" l="Reply" o={() => { setReplyTo(msg); setMsgMenuId(null); inputRef.current?.focus(); }}/>
-                            <MI i="😀" l="React" o={() => { setReactPickerId(msg.id); setMsgMenuId(null); }}/>
-                            <MI i={msg.is_starred ? "⭐" : "☆"} l={msg.is_starred ? "Unstar" : "Star"} o={() => starMsg(msg.id, !msg.is_starred)}/>
-                            <MI i="📋" l="Copy" o={() => { navigator.clipboard.writeText(msg.content); setMsgMenuId(null); }}/>
-                            <MI i="↪️" l="Forward" o={() => { setForwardMsg(msg); setForwardSelected(new Set()); setMsgMenuId(null); }}/>
+                          <div className={`absolute ${isMe ? "right-0" : "left-0"} ${isNearBottom ? "bottom-8" : "top-8"} z-[100] bg-[#1e2d3a] rounded-2xl elevation-3 py-1.5 min-w-[180px] border border-white/[0.08] animate-scale-in`} onClick={(e) => e.stopPropagation()}>
+                            <MI i="reply" l="Reply" o={() => { setReplyTo(msg); setMsgMenuId(null); inputRef.current?.focus(); }}/>
+                            <MI i="add_reaction" l="React" o={() => { setReactPickerId(msg.id); setMsgMenuId(null); }}/>
+                            <MI i={msg.is_starred ? "star" : "star_outline"} l={msg.is_starred ? "Unstar" : "Star"} o={() => starMsg(msg.id, !msg.is_starred)}/>
+                            <MI i="content_copy" l="Copy" o={() => { navigator.clipboard.writeText(msg.content); setMsgMenuId(null); }}/>
+                            <MI i="forward" l="Forward" o={() => { setForwardMsg(msg); setForwardSelected(new Set()); setMsgMenuId(null); }}/>
                           </div>
                           );
                         })()}
@@ -766,17 +766,17 @@ export default function Dashboard() {
             {/* Scroll to bottom arrow */}
             {!isAtBottom && (
               <div className="relative">
-                <button onClick={scrollToBottom} className="absolute right-6 -top-14 w-10 h-10 rounded-full bg-[#202c33] border border-white/[0.1] shadow-lg flex items-center justify-center hover:bg-[#2a3942] transition-colors z-20">
+                <button onClick={scrollToBottom} className="absolute right-6 -top-14 w-10 h-10 rounded-full bg-[#1e2d3a] border border-white/[0.1] shadow-lg flex items-center justify-center hover:bg-[#202d3a] transition-colors z-20">
                   {hasNewMsg && <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-emerald-500 text-white text-[10px] font-bold flex items-center justify-center">!</span>}
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2"><path d="M6 9l6 6 6-6"/></svg>
+                  <span className="material-symbols-rounded text-white" style={{ fontSize: 18 }}>expand_more</span>
                 </button>
               </div>
             )}
 
             {/* Reply */}
             {replyTo && (
-              <div className="px-4 sm:px-16 pt-2" style={{ background: "#1a2028" }}>
-                <div className="flex items-center gap-3 bg-[#111b21] border-l-[3px] border-emerald-500 rounded-lg px-3 py-2">
+              <div className="px-4 sm:px-16 pt-2" style={{ background: "#162028" }}>
+                <div className="flex items-center gap-3 bg-[#141c24] border-l-[3px] border-emerald-500 rounded-lg px-3 py-2">
                   <div className="flex-1 min-w-0"><p className="text-[11px] font-bold text-emerald-400">{replyTo.role === "user" ? (sel?.name || sel?.phone) : "You"}</p><p className="text-[12px] text-white/50 truncate">{replyTo.content}</p></div>
                   <button onClick={() => setReplyTo(null)} className="text-white/30 hover:text-white/60 text-lg">✕</button>
                 </div>
@@ -785,7 +785,7 @@ export default function Dashboard() {
 
             {/* Emoji */}
             {showEmoji && (
-              <div className="mx-4 sm:mx-16 mb-1 bg-[#182229] rounded-xl border border-white/[0.08] shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()} style={{ maxHeight: 280 }}>
+              <div className="mx-4 sm:mx-16 mb-1 bg-[#162230] rounded-xl border border-white/[0.08] shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()} style={{ maxHeight: 280 }}>
                 <div className="flex border-b border-white/[0.06] px-2 py-1.5 gap-1">
                   {Object.keys(EMOJIS).map((c) => <button key={c} onClick={() => setEmojiCat(c)} className={`text-[18px] w-8 h-8 rounded-lg flex-shrink-0 flex items-center justify-center ${emojiCat === c ? "bg-emerald-500/20" : "hover:bg-white/[0.06]"}`}>{c}</button>)}
                 </div>
@@ -797,7 +797,7 @@ export default function Dashboard() {
 
             {/* Quick Replies Panel */}
             {showQuickReplies && (
-              <div className="mx-4 sm:mx-16 mb-1 bg-[#182229] rounded-xl border border-white/[0.08] shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()} style={{ maxHeight: 360 }}>
+              <div className="mx-4 sm:mx-16 mb-1 bg-[#162230] rounded-xl border border-white/[0.08] shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()} style={{ maxHeight: 360 }}>
                 <div className="flex items-center justify-between px-3 py-2 border-b border-white/[0.06]">
                   <span className="text-[13px] font-semibold text-white/80">⚡ Quick Replies</span>
                   <div className="flex gap-1">
@@ -849,11 +849,11 @@ export default function Dashboard() {
             )}
 
             {/* Input */}
-            <div className="px-4 sm:px-12 py-2 flex items-end gap-2" style={{ background: "#202c33" }}>
-              <button onClick={(e) => { e.stopPropagation(); setShowEmoji(!showEmoji); setShowQuickReplies(false); }} className="w-10 h-10 rounded-full hover:bg-white/[0.08] flex items-center justify-center text-white/40 text-[22px] flex-shrink-0">😀</button>
-              <button onClick={(e) => { e.stopPropagation(); setShowQuickReplies(!showQuickReplies); setShowEmoji(false); setQrMode("list"); setQrSearch(""); }} className="w-10 h-10 rounded-full hover:bg-white/[0.08] flex items-center justify-center text-white/40 text-[18px] flex-shrink-0" title="Quick Replies">⚡</button>
-              <button onClick={() => document.getElementById("file-input")?.click()} className="w-10 h-10 rounded-full hover:bg-white/[0.08] flex items-center justify-center text-white/40 flex-shrink-0" title="Attach file">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+            <div className="px-4 sm:px-12 py-2.5 flex items-end gap-2" style={{ background: "#1a2530" }}>
+              <button onClick={(e) => { e.stopPropagation(); setShowEmoji(!showEmoji); setShowQuickReplies(false); }} className="w-10 h-10 rounded-xl hover:bg-white/[0.08] flex items-center justify-center text-white/40 flex-shrink-0 transition-colors"><span className="material-symbols-rounded" style={{ fontSize: 22 }}>mood</span></button>
+              <button onClick={(e) => { e.stopPropagation(); setShowQuickReplies(!showQuickReplies); setShowEmoji(false); setQrMode("list"); setQrSearch(""); }} className="w-10 h-10 rounded-xl hover:bg-white/[0.08] flex items-center justify-center text-white/40 flex-shrink-0 transition-colors" title="Quick Replies"><span className="material-symbols-rounded" style={{ fontSize: 22 }}>bolt</span></button>
+              <button onClick={() => document.getElementById("file-input")?.click()} className="w-10 h-10 rounded-xl hover:bg-white/[0.08] flex items-center justify-center text-white/40 flex-shrink-0 transition-colors" title="Attach file">
+                <span className="material-symbols-rounded" style={{ fontSize: 22 }}>attach_file</span>
               </button>
               <input id="file-input" type="file" className="hidden" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar" onChange={async (e) => {
                 const file = e.target.files?.[0];
@@ -872,10 +872,10 @@ export default function Dashboard() {
                 } catch (err) { setMsgs((p) => p.filter((m) => m.id !== tempId)); alert("Error: " + String(err)); setSending(false); }
                 finally { e.target.value = ""; }
               }}/>
-              <div className="flex-1 bg-[#2a3942] rounded-lg px-4 py-2.5"><textarea ref={inputRef} value={input} onChange={(e) => { setInput(e.target.value); e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px"; }} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }} placeholder="Type a message" rows={1} className="w-full bg-transparent text-[14px] text-white placeholder:text-white/30 focus:outline-none resize-none leading-[1.4] max-h-[120px] overflow-y-auto" style={{ height: "auto" }}/></div>
-              <button onClick={handleSend} disabled={sending || !input.trim()} className="w-10 h-10 rounded-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-20 transition flex items-center justify-center flex-shrink-0">
-                {sending ? <svg className="animate-spin" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-                : <svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>}
+              <div className="flex-1 bg-[#202d3a] rounded-2xl px-4 py-2.5 border border-white/[0.06] focus-within:border-emerald-500/30 transition-colors"><textarea ref={inputRef} value={input} onChange={(e) => { setInput(e.target.value); e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px"; }} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }} placeholder="Type a message" rows={1} className="w-full bg-transparent text-[14px] text-white placeholder:text-white/30 focus:outline-none resize-none leading-[1.4] max-h-[120px] overflow-y-auto" style={{ height: "auto" }}/></div>
+              <button onClick={handleSend} disabled={sending || !input.trim()} className="w-10 h-10 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-20 transition-all flex items-center justify-center flex-shrink-0">
+                {sending ? <span className="material-symbols-rounded animate-spin text-white" style={{ fontSize: 20 }}>progress_activity</span>
+                : <span className="material-symbols-rounded text-white" style={{ fontSize: 20, fontVariationSettings: "'FILL' 1" }}>send</span>}
               </button>
             </div>
           </>
@@ -888,13 +888,13 @@ export default function Dashboard() {
       {/* Forward Modal — multi-select */}
       {forwardMsg && (
         <div className="fixed inset-0 z-[200] bg-black/70 flex items-center justify-center" onClick={() => { setForwardMsg(null); setForwardSelected(new Set()); }}>
-          <div className="bg-[#111b21] rounded-xl border border-white/[0.08] shadow-2xl w-[360px] max-h-[520px] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-[#141c24] rounded-xl border border-white/[0.08] shadow-2xl w-[360px] max-h-[520px] overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="px-4 py-3 border-b border-white/[0.06] flex items-center justify-between">
               <h3 className="text-[14px] font-semibold text-white">Forward to</h3>
               <button onClick={() => { setForwardMsg(null); setForwardSelected(new Set()); }} className="text-white/30 hover:text-white/60 text-lg">✕</button>
             </div>
             <div className="px-3 py-2 border-b border-white/[0.06]">
-              <div className="bg-[#202c33] rounded-lg px-3 py-1.5 text-[12px] text-white/50 truncate">
+              <div className="bg-[#1e2d3a] rounded-lg px-3 py-1.5 text-[12px] text-white/50 truncate">
                 {forwardMsg.content?.substring(0, 100)}
               </div>
             </div>
@@ -918,9 +918,9 @@ export default function Dashboard() {
                     setForwardSelected(s);
                   }} className={`w-full flex items-center gap-3 px-4 py-2.5 text-left ${isSelected ? "bg-emerald-500/10" : "hover:bg-white/[0.04]"}`}>
                     <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${isSelected ? "bg-emerald-500 border-emerald-500" : "border-white/20"}`}>
-                      {isSelected && <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3"><polyline points="20 6 9 17 4 12"/></svg>}
+                      {isSelected && <span className="material-symbols-rounded text-white" style={{ fontSize: 14 }}>check</span>}
                     </div>
-                    <div className={`w-9 h-9 rounded-full bg-gradient-to-br ${aclr(c.id)} flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0`}>{ini(c.name, c.phone)}</div>
+                    <div className={`w-9 h-9 rounded-xl bg-gradient-to-br ${aclr(c.id)} flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0`}>{ini(c.name, c.phone)}</div>
                     <div className="flex-1 min-w-0">
                       <p className="text-[13px] text-white font-medium truncate">{c.name || c.phone}</p>
                     </div>
@@ -931,7 +931,7 @@ export default function Dashboard() {
             {forwardSelected.size > 0 && (
               <div className="px-4 py-3 border-t border-white/[0.06] flex justify-end">
                 <button onClick={() => forwardMessage(forwardMsg.id, Array.from(forwardSelected))} className="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-6 py-2 rounded-lg text-[13px] flex items-center gap-2">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="white"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+                  <span className="material-symbols-rounded text-white" style={{ fontSize: 16, fontVariationSettings: "'FILL' 1" }}>send</span>
                   Send ({forwardSelected.size})
                 </button>
               </div>
@@ -947,5 +947,5 @@ export default function Dashboard() {
 }
 
 function MI({ i, l, o, d }: { i: string; l: string; o: () => void; d?: boolean }) {
-  return <button onClick={o} className={`w-full flex items-center gap-2.5 px-4 py-2.5 text-[13px] ${d ? "text-red-400 hover:bg-red-500/10" : "text-white/85 hover:bg-white/[0.06]"}`}><span className="w-5 text-center">{i}</span><span>{l}</span></button>;
+  return <button onClick={o} className={`w-full flex items-center gap-3 px-4 py-2.5 text-[13px] transition-colors ${d ? "text-red-400 hover:bg-red-500/10" : "text-white/85 hover:bg-white/[0.06]"}`}><span className="material-symbols-rounded" style={{ fontSize: 18, fontVariationSettings: "'FILL' 0, 'wght' 400" }}>{i}</span><span>{l}</span></button>;
 }
