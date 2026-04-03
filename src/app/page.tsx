@@ -98,6 +98,7 @@ export default function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [msgMenuPos, setMsgMenuPos] = useState<{x: number; y: number; isMe: boolean} | null>(null);
   const [sidebarMenu, setSidebarMenu] = useState(false);
+  const [showLabelsModal, setShowLabelsModal] = useState(false);
 
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -174,7 +175,7 @@ export default function Dashboard() {
   function downloadContactsCsv() { window.open("/api/contacts/export", "_blank"); }
   function addOptimisticMsg(tid: string, content: string, type: string = "text") { if (!selId) return; const m: Message = { id: tid, conversation_id: selId, role: "assistant", content, message_type: type as Message["message_type"], media_url: null, media_mime_type: null, media_filename: null, media_caption: null, media_sha256: null, reply_to_id: null, reaction: null, reaction_msg_id: null, latitude: null, longitude: null, location_name: null, location_address: null, whatsapp_msg_id: null, is_deleted: false, is_starred: false, status: "sent", created_at: new Date().toISOString() }; setMsgs(p => [...p, m]); setIsAtBottom(true); }
 
-  useEffect(() => { const h = (e: KeyboardEvent) => { if (e.key === "Escape") { setReplyTo(null); setChatMenuId(null); setMsgMenuId(null); setMsgMenuPos(null); setReactPickerId(null); setShowEmoji(false); setHeaderMenu(false); setImgPreview(null); setShowChatSearch(false); setChatLabelOpen(null); setShowLabelMenu(null); setForwardMsg(null); setForwardSelected(new Set()); setSidebarMenu(false); } }; document.addEventListener("keydown", h); return () => document.removeEventListener("keydown", h); }, []);
+  useEffect(() => { const h = (e: KeyboardEvent) => { if (e.key === "Escape") { setReplyTo(null); setChatMenuId(null); setMsgMenuId(null); setMsgMenuPos(null); setReactPickerId(null); setShowEmoji(false); setHeaderMenu(false); setImgPreview(null); setShowChatSearch(false); setChatLabelOpen(null); setShowLabelMenu(null); setForwardMsg(null); setForwardSelected(new Set()); setSidebarMenu(false); setShowLabelsModal(false); } }; document.addEventListener("keydown", h); return () => document.removeEventListener("keydown", h); }, []);
 
   /* ═══ HELPERS ═══ */
   function ft(d: string) { const t = new Date(d), n = new Date(), df = n.getTime() - t.getTime(); if (df < 86400000 && t.getDate() === n.getDate()) return t.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); if (df < 172800000) return "Yesterday"; if (df < 604800000) return t.toLocaleDateString([], { weekday: "short" }); return t.toLocaleDateString([], { month: "short", day: "numeric" }); }
@@ -268,6 +269,7 @@ export default function Dashboard() {
                     ))}
                   </div>
                   <div style={{ height: 1, background: "var(--border)", margin: "2px 0" }}/>
+                  <MI i="label" l="Manage Labels" o={() => { setSidebarMenu(false); setShowLabelsModal(true); }}/>
                   {user.role === "admin" && <MI i="group" l="Manage Users" o={() => { router.push("/admin"); setSidebarMenu(false); }}/>}
                   {user.role === "admin" && <MI i="download" l="Export Contacts" o={() => { downloadContactsCsv(); setSidebarMenu(false); }}/>}
                   {user.role === "admin" && <div style={{ height: 1, background: "var(--border)", margin: "2px 0" }}/>}
@@ -328,26 +330,6 @@ export default function Dashboard() {
               </div>
             </div>)}
           </div>}
-
-          {/* ── Labels Manager ── */}
-          <div style={{ borderTop: "1px solid var(--border)" }}>
-            <div className="px-4 py-3.5">
-              <p className="text-[10px] font-bold tracking-[0.1em] mb-3" style={{ color: "var(--text-4)", textTransform: "uppercase" }}>Labels</p>
-              <div className="flex gap-2 mb-2 items-center">
-                <input type="text" value={newLabelName} onChange={e => setNewLabelName(e.target.value)} placeholder="New label..." onKeyDown={e => e.key === "Enter" && createLabel()} className="flex-1 rounded-lg px-3 py-2 text-[12.5px] focus:outline-none min-w-0 tr" style={{ background: "var(--surface-3)", color: "var(--text-1)", border: "1.5px solid transparent" }} onFocus={e => e.target.style.borderColor = "var(--border-focus)"} onBlur={e => e.target.style.borderColor = "transparent"}/>
-                <button onClick={createLabel} disabled={!newLabelName.trim()} className="h-8 px-3 rounded-lg text-[12px] font-bold disabled:opacity-30 tr flex items-center gap-1" style={{ background: "var(--primary)", color: "var(--primary-text)" }}><span className="material-symbols-rounded" style={{ fontSize: 16 }}>add</span></button>
-              </div>
-              {/* Color palette */}
-              <div className="flex gap-1.5 mb-3">
-                {LABEL_COLORS.map(c => <button key={c} onClick={() => setNewLabelColor(c)} className="w-6 h-6 rounded-full tr hover:scale-110" style={{ background: c, boxShadow: newLabelColor === c ? `0 0 0 2.5px var(--bg), 0 0 0 4.5px ${c}` : "none" }}/>)}
-              </div>
-              {labels.map(l => <div key={l.id} className="flex items-center gap-2.5 py-2 group/l">
-                <span className="w-3 h-3 rounded-full flex-shrink-0" style={{ background: l.color }}/>
-                <span className="text-[12.5px] flex-1 font-medium" style={{ color: "var(--text-2)" }}>{l.name}</span>
-                {user.role === "admin" && <button onClick={() => deleteLabel(l.id)} className="opacity-0 group-hover/l:opacity-70 hover:!opacity-100 tr text-[11px] w-6 h-6 rounded-md flex items-center justify-center" style={{ color: "var(--danger)", background: "var(--danger-muted)" }}>✕</button>}
-              </div>)}
-            </div>
-          </div>
         </div>
       </div>
 
@@ -440,6 +422,41 @@ export default function Dashboard() {
           </div>
         </>)}
       </div>
+
+      {/* ▓▓ Labels Modal ▓▓ */}
+      {showLabelsModal && <div className="fixed inset-0 z-[200] flex items-center justify-center" style={{ background: "var(--bg-overlay)", backdropFilter: "blur(8px)" }} onClick={() => setShowLabelsModal(false)}>
+        <div className="rounded-2xl w-[400px] max-h-[520px] overflow-hidden anim-scale-in" style={{ background: "var(--surface-1)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)" }} onClick={e => e.stopPropagation()}>
+          <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: "1px solid var(--border)" }}>
+            <div className="flex items-center gap-2.5">
+              <span className="material-symbols-rounded" style={{ fontSize: 22, color: "var(--primary)" }}>label</span>
+              <h3 className="text-[16px] font-bold" style={{ color: "var(--text-1)" }}>Labels</h3>
+              <span className="text-[12px] px-2 py-0.5 rounded-full font-medium" style={{ background: "var(--surface-3)", color: "var(--text-3)" }}>{labels.length}</span>
+            </div>
+            <button onClick={() => setShowLabelsModal(false)} className="w-8 h-8 rounded-lg flex items-center justify-center tr hover:bg-[var(--surface-3)]" style={{ color: "var(--text-3)" }}><span className="material-symbols-rounded" style={{ fontSize: 20 }}>close</span></button>
+          </div>
+
+          {/* Create new label */}
+          <div className="px-5 py-3.5" style={{ borderBottom: "1px solid var(--border)" }}>
+            <div className="flex gap-2 items-center mb-2.5">
+              <input type="text" value={newLabelName} onChange={e => setNewLabelName(e.target.value)} placeholder="New label name..." onKeyDown={e => e.key === "Enter" && createLabel()} className="flex-1 rounded-xl px-3.5 py-2.5 text-[13px] focus:outline-none tr" style={{ background: "var(--surface-3)", color: "var(--text-1)", border: "1.5px solid transparent" }} onFocus={e => e.target.style.borderColor = "var(--border-focus)"} onBlur={e => e.target.style.borderColor = "transparent"}/>
+              <button onClick={createLabel} disabled={!newLabelName.trim()} className="h-10 px-4 rounded-xl text-[13px] font-bold disabled:opacity-30 tr flex items-center gap-1.5" style={{ background: "var(--primary)", color: "var(--primary-text)" }}><span className="material-symbols-rounded" style={{ fontSize: 18 }}>add</span>Add</button>
+            </div>
+            <div className="flex gap-2">
+              {LABEL_COLORS.map(c => <button key={c} onClick={() => setNewLabelColor(c)} className="w-7 h-7 rounded-full tr hover:scale-110" style={{ background: c, boxShadow: newLabelColor === c ? `0 0 0 2.5px var(--surface-1), 0 0 0 4.5px ${c}` : "none" }}/>)}
+            </div>
+          </div>
+
+          {/* Label list */}
+          <div className="overflow-y-auto" style={{ maxHeight: 320 }}>
+            {labels.length === 0 && <div className="px-5 py-10 text-center"><span className="material-symbols-rounded" style={{ fontSize: 36, color: "var(--text-4)" }}>label_off</span><p className="text-[13px] mt-2" style={{ color: "var(--text-4)" }}>No labels yet. Create one above.</p></div>}
+            {labels.map(l => <div key={l.id} className="flex items-center gap-3 px-5 py-3 group/l tr" onMouseEnter={e => e.currentTarget.style.background = "var(--surface-3)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+              <span className="w-4 h-4 rounded-full flex-shrink-0 shadow-sm" style={{ background: l.color }}/>
+              <span className="text-[14px] flex-1 font-medium" style={{ color: "var(--text-1)" }}>{l.name}</span>
+              {user.role === "admin" && <button onClick={() => deleteLabel(l.id)} className="opacity-0 group-hover/l:opacity-70 hover:!opacity-100 tr w-8 h-8 rounded-lg flex items-center justify-center" style={{ color: "var(--danger)", background: "var(--danger-muted)" }}><span className="material-symbols-rounded" style={{ fontSize: 16 }}>delete</span></button>}
+            </div>)}
+          </div>
+        </div>
+      </div>}
 
       {/* ▓▓ Fixed Message Menu ▓▓ */}
       {msgMenuId && msgMenuPos && (() => {
