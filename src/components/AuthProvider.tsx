@@ -36,6 +36,21 @@ async function serverCheckAllowed(email: string): Promise<{ allowed: boolean; di
   try { const r = await fetch("/api/auth/check", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) }); return await r.json(); } catch { return { allowed: false }; }
 }
 
+// Safe MFA check — returns null if MFA APIs not available or error
+async function safeMfaCheck(sb: SupabaseClient): Promise<{ needsMfa: boolean; factorId?: string }> {
+  try {
+    const { data: aal } = await sb.auth.mfa.getAuthenticatorAssuranceLevel();
+    if (aal && aal.currentLevel === "aal1" && aal.nextLevel === "aal2") {
+      const { data: factors } = await sb.auth.mfa.listFactors();
+      const totp = factors?.totp?.find(f => f.status === "verified");
+      if (totp) return { needsMfa: true, factorId: totp.id };
+    }
+  } catch (e) {
+    console.warn("MFA check skipped:", e);
+  }
+  return { needsMfa: false };
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
@@ -58,10 +73,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const { data: { session } } = await sb.auth.getSession();
         if (cancelled) return;
         if (session?.user) {
-          // Check MFA level — if aal1 but factors exist, user needs to verify MFA
-          const { data: aal } = await sb.auth.mfa.getAuthenticatorAssuranceLevel();
-          if (aal && aal.currentLevel === "aal1" && aal.nextLevel === "aal2") {
-            // MFA enrolled but not verified this session — don't set user, let login handle it
+          // Safe MFA check — won't hang if MFA not available
+          const mfa = await safeMfaCheck(sb);
+          if (mfa.needsMfa) {
+            // MFA enrolled but not verified — don't set user, login page will handle
             if (!cancelled) setLoading(false);
             return;
           }
@@ -79,9 +94,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (loggingOut) return;
       if (event === "SIGNED_OUT") { setUser(null); return; }
       if (session?.user) {
-        // Only resolve if MFA is satisfied or not enrolled
-        const { data: aal } = await sb.auth.mfa.getAuthenticatorAssuranceLevel();
-        if (aal && aal.currentLevel === "aal1" && aal.nextLevel === "aal2") return; // Needs MFA
+        try {
+          const mfa = await safeMfaCheck(sb);
+          if (mfa.needsMfa) return; // Needs MFA verification
+        } catch { /* ignore */ }
         const resolved = await resolveUser(session.user);
         setUser(resolved);
       }
@@ -97,13 +113,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) return { error: "Invalid email or password." };
     if (!data.user) return { error: "Login failed." };
 
-    // Check if MFA is enrolled
-    const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-    if (aal && aal.currentLevel === "aal1" && aal.nextLevel === "aal2") {
-      // Get the TOTP factor
-      const { data: factors } = await supabase.auth.mfa.listFactors();
-      const totp = factors?.totp?.[0];
-      if (totp) return { needsMfa: true, factorId: totp.id };
+    // Safe MFA check
+    const mfa = await safeMfaCheck(supabase);
+    if (mfa.needsMfa && mfa.factorId) {
+      return { needsMfa: true, factorId: mfa.factorId };
     }
 
     // No MFA — resolve user directly
@@ -114,18 +127,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function verifyMfa(factorId: string, code: string): Promise<{ error?: string }> {
     if (!supabase) return { error: "Supabase not configured" };
-    const { data: challenge, error: cErr } = await supabase.auth.mfa.challenge({ factorId });
-    if (cErr || !challenge) return { error: "Failed to create MFA challenge." };
-    const { error: vErr } = await supabase.auth.mfa.verify({ factorId, challengeId: challenge.id, code });
-    if (vErr) return { error: "Invalid code. Please try again." };
+    try {
+      const { data: challenge, error: cErr } = await supabase.auth.mfa.challenge({ factorId });
+      if (cErr || !challenge) return { error: "Failed to create MFA challenge." };
+      const { error: vErr } = await supabase.auth.mfa.verify({ factorId, challengeId: challenge.id, code });
+      if (vErr) return { error: "Invalid code. Please try again." };
 
-    // MFA verified — resolve user
-    const { data: { user: authUser } } = await supabase.auth.getUser();
-    if (authUser) {
-      const resolved = await resolveUser(authUser);
-      if (resolved) { setUser(resolved); return {}; }
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (authUser) {
+        const resolved = await resolveUser(authUser);
+        if (resolved) { setUser(resolved); return {}; }
+      }
+      return { error: "Access denied." };
+    } catch (e) {
+      return { error: "MFA verification failed: " + String(e) };
     }
-    return { error: "Access denied." };
   }
 
   function signOut() {
