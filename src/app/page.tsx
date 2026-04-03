@@ -243,9 +243,9 @@ export default function Dashboard() {
       const { data: factors } = await supabase.auth.mfa.listFactors();
       const verified = factors?.totp?.find(f => f.status === "verified");
       if (verified) { setMfa2FAState("enabled"); setMfaFactorId(verified.id); return; }
-      // Remove any unverified factors (leftover from incomplete setup)
-      const unverified = factors?.totp?.filter(f => f.status === "unverified") || [];
-      for (const f of unverified) { await supabase.auth.mfa.unenroll({ factorId: f.id }).catch(() => {}); }
+      // Remove any non-verified factors (leftover from incomplete setup)
+      const leftover = factors?.totp?.filter(f => f.status !== "verified") || [];
+      for (const f of leftover) { await supabase.auth.mfa.unenroll({ factorId: f.id }).catch(() => {}); }
       setMfa2FAState("idle");
     } catch { setMfa2FAState("idle"); }
   }
@@ -254,10 +254,10 @@ export default function Dashboard() {
     if (!supabase) return;
     setMfaError(""); setMfa2FAState("enrolling");
     try {
-      // Clean up any existing unverified factors first
+      // Clean up any non-verified factors first
       const { data: factors } = await supabase.auth.mfa.listFactors();
-      const unverified = factors?.totp?.filter(f => f.status === "unverified") || [];
-      for (const f of unverified) { await supabase.auth.mfa.unenroll({ factorId: f.id }).catch(() => {}); }
+      const leftover = factors?.totp?.filter(f => f.status !== "verified") || [];
+      for (const f of leftover) { await supabase.auth.mfa.unenroll({ factorId: f.id }).catch(() => {}); }
       // Now enroll fresh
       const { data, error } = await supabase.auth.mfa.enroll({ factorType: "totp", friendlyName: "Whatt Dash" });
       if (error || !data) { setMfaError(error?.message || "Failed to enroll"); setMfa2FAState("idle"); return; }
