@@ -29,9 +29,32 @@ export default function Dashboard() {
   const router = useRouter();
 
   /* ═══ THEME ═══ */
-  const [theme, setTheme] = useState<"light"|"dark">("dark");
-  useEffect(() => { const t = (localStorage.getItem("wd-theme") as "light"|"dark") || "dark"; setTheme(t); document.documentElement.setAttribute("data-theme", t); }, []);
-  function toggleTheme() { const n = theme === "dark" ? "light" : "dark"; setTheme(n); localStorage.setItem("wd-theme", n); document.documentElement.setAttribute("data-theme", n); }
+  const [theme, setTheme] = useState<"light"|"dark"|"system">("dark");
+  useEffect(() => {
+    const saved = localStorage.getItem("wd-theme") as "light"|"dark"|"system"|null;
+    const t = saved || "dark";
+    setTheme(t);
+    applyTheme(t);
+  }, []);
+  function applyTheme(t: "light"|"dark"|"system") {
+    if (t === "system") {
+      const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      document.documentElement.setAttribute("data-theme", isDark ? "dark" : "light");
+    } else {
+      document.documentElement.setAttribute("data-theme", t);
+    }
+  }
+  function cycleTheme(pick: "light"|"dark"|"system") {
+    setTheme(pick); localStorage.setItem("wd-theme", pick); applyTheme(pick); setSidebarMenu(false);
+  }
+  // Listen for system theme changes
+  useEffect(() => {
+    if (theme !== "system") return;
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const handler = () => applyTheme("system");
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, [theme]);
 
   const supabase = useMemo(() => { const u = process.env.NEXT_PUBLIC_SUPABASE_URL, k = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY; if (!u || !k) return null; return createClient(u, k); }, []);
 
@@ -74,6 +97,7 @@ export default function Dashboard() {
   const [qrSearch, setQrSearch] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [msgMenuPos, setMsgMenuPos] = useState<{x: number; y: number; isMe: boolean} | null>(null);
+  const [sidebarMenu, setSidebarMenu] = useState(false);
 
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -134,7 +158,7 @@ export default function Dashboard() {
   }
 
   /* ═══ ACTIONS ═══ */
-  function closeMenus() { setChatMenuId(null); setHeaderMenu(false); setMsgMenuId(null); setMsgMenuPos(null); }
+  function closeMenus() { setChatMenuId(null); setHeaderMenu(false); setMsgMenuId(null); setMsgMenuPos(null); setSidebarMenu(false); }
   function pausePoll(ms = 4000) { skipPollRef.current = true; setTimeout(() => { skipPollRef.current = false; }, ms); }
 
   async function act(url: string, body?: object) { closeMenus(); pausePoll(); if (body && typeof body === "object") { const b = body as Record<string, unknown>; const cid = url.match(/conversations\/([^/]+)\//)?.[1]; if ("archived" in b && b.archived) { const chat = convos.find(c => c.id === cid); setConvos(p => p.filter(c => c.id !== cid)); if (chat) setArchived(p => [{ ...chat, is_archived: true }, ...p]); if (selId === cid) { setSelId(null); setMsgs([]); } } else { setConvos(p => p.map(c => { if (c.id !== cid) return c; if ("pinned" in b) return { ...c, is_pinned: !!b.pinned }; if ("muted" in b) return { ...c, is_muted: !!b.muted }; if ("unread_count" in b) return { ...c, unread_count: b.unread_count as number }; return c; })); } } fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined }).catch(() => {}); }
@@ -150,7 +174,7 @@ export default function Dashboard() {
   function downloadContactsCsv() { window.open("/api/contacts/export", "_blank"); }
   function addOptimisticMsg(tid: string, content: string, type: string = "text") { if (!selId) return; const m: Message = { id: tid, conversation_id: selId, role: "assistant", content, message_type: type as Message["message_type"], media_url: null, media_mime_type: null, media_filename: null, media_caption: null, media_sha256: null, reply_to_id: null, reaction: null, reaction_msg_id: null, latitude: null, longitude: null, location_name: null, location_address: null, whatsapp_msg_id: null, is_deleted: false, is_starred: false, status: "sent", created_at: new Date().toISOString() }; setMsgs(p => [...p, m]); setIsAtBottom(true); }
 
-  useEffect(() => { const h = (e: KeyboardEvent) => { if (e.key === "Escape") { setReplyTo(null); setChatMenuId(null); setMsgMenuId(null); setMsgMenuPos(null); setReactPickerId(null); setShowEmoji(false); setHeaderMenu(false); setImgPreview(null); setShowChatSearch(false); setChatLabelOpen(null); setShowLabelMenu(null); setForwardMsg(null); setForwardSelected(new Set()); } }; document.addEventListener("keydown", h); return () => document.removeEventListener("keydown", h); }, []);
+  useEffect(() => { const h = (e: KeyboardEvent) => { if (e.key === "Escape") { setReplyTo(null); setChatMenuId(null); setMsgMenuId(null); setMsgMenuPos(null); setReactPickerId(null); setShowEmoji(false); setHeaderMenu(false); setImgPreview(null); setShowChatSearch(false); setChatLabelOpen(null); setShowLabelMenu(null); setForwardMsg(null); setForwardSelected(new Set()); setSidebarMenu(false); } }; document.addEventListener("keydown", h); return () => document.removeEventListener("keydown", h); }, []);
 
   /* ═══ HELPERS ═══ */
   function ft(d: string) { const t = new Date(d), n = new Date(), df = n.getTime() - t.getTime(); if (df < 86400000 && t.getDate() === n.getDate()) return t.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); if (df < 172800000) return "Yesterday"; if (df < 604800000) return t.toLocaleDateString([], { weekday: "short" }); return t.toLocaleDateString([], { month: "short", day: "numeric" }); }
@@ -228,12 +252,28 @@ export default function Dashboard() {
                 <p className="text-[11px] font-medium" style={{ color: "var(--text-4)" }}>{user.display_name} · {convos.length} chats</p>
               </div>
             </div>
-            <div className="flex items-center">
-              <button onClick={toggleTheme} className={s.iconBtn} style={{ color: "var(--text-3)" }} title={theme === "dark" ? "Light mode" : "Dark mode"}><span className="material-symbols-rounded" style={{ fontSize: 20, fontVariationSettings: "'FILL' 1" }}>{theme === "dark" ? "light_mode" : "dark_mode"}</span></button>
-              {user.role === "admin" && <button onClick={() => router.push("/admin")} className={s.iconBtn} style={{ color: "var(--text-3)" }} title="Users"><span className="material-symbols-rounded" style={{ fontSize: 20 }}>group</span></button>}
+            <div className="flex items-center gap-0.5">
               <button onClick={() => setShowSearch(!showSearch)} className={s.iconBtn} style={{ color: "var(--text-3)" }}><span className="material-symbols-rounded" style={{ fontSize: 20 }}>search</span></button>
-              {user.role === "admin" && <button onClick={downloadContactsCsv} className={s.iconBtn} style={{ color: "var(--text-3)" }} title="Export"><span className="material-symbols-rounded" style={{ fontSize: 20 }}>download</span></button>}
-              <button onClick={signOut} className={s.iconBtn} style={{ color: "var(--text-3)" }} title="Sign Out"><span className="material-symbols-rounded" style={{ fontSize: 20 }}>logout</span></button>
+              <div className="relative">
+                <button onClick={e => { e.stopPropagation(); setSidebarMenu(!sidebarMenu); }} className={s.iconBtn} style={{ color: "var(--text-3)" }}><span className="material-symbols-rounded" style={{ fontSize: 20 }}>more_vert</span></button>
+                {sidebarMenu && <div className={s.menuWrap} style={{ background: "var(--surface-2)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)", backdropFilter: "blur(20px)", position: "absolute", right: 0, top: "100%", marginTop: 4, zIndex: 100, minWidth: 220 }} onClick={e => e.stopPropagation()}>
+                  {/* Theme Section */}
+                  <div className="px-4 pt-2.5 pb-1"><p className="text-[10px] font-bold tracking-[0.08em] uppercase" style={{ color: "var(--text-4)" }}>Theme</p></div>
+                  <div className="px-3 pb-1.5 flex gap-1">
+                    {([["light", "light_mode", "Light"], ["dark", "dark_mode", "Dark"], ["system", "desktop_windows", "System"]] as const).map(([val, icon, label]) => (
+                      <button key={val} onClick={() => cycleTheme(val)} className="flex-1 flex flex-col items-center gap-1 py-2 rounded-xl tr" style={{ background: theme === val ? "var(--primary-muted)" : "transparent", color: theme === val ? "var(--primary)" : "var(--text-3)" }}>
+                        <span className="material-symbols-rounded" style={{ fontSize: 18, fontVariationSettings: theme === val ? "'FILL' 1" : "'FILL' 0" }}>{icon}</span>
+                        <span className="text-[10px] font-semibold">{label}</span>
+                      </button>
+                    ))}
+                  </div>
+                  <div style={{ height: 1, background: "var(--border)", margin: "2px 0" }}/>
+                  {user.role === "admin" && <MI i="group" l="Manage Users" o={() => { router.push("/admin"); setSidebarMenu(false); }}/>}
+                  {user.role === "admin" && <MI i="download" l="Export Contacts" o={() => { downloadContactsCsv(); setSidebarMenu(false); }}/>}
+                  {user.role === "admin" && <div style={{ height: 1, background: "var(--border)", margin: "2px 0" }}/>}
+                  <MI i="logout" l="Sign Out" o={() => { setSidebarMenu(false); signOut(); }} d/>
+                </div>}
+              </div>
             </div>
           </div>
           {showSearch && <div className="relative mt-3 anim-fade-up"><span className="material-symbols-rounded absolute left-3.5 top-1/2 -translate-y-1/2" style={{ fontSize: 18, color: "var(--text-4)" }}>search</span><input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search conversations..." className="w-full rounded-xl pl-10 pr-4 py-2.5 text-[13px] focus:outline-none tr" style={{ background: "var(--surface-3)", color: "var(--text-1)", border: "1.5px solid transparent" }} onFocus={e => e.target.style.borderColor = "var(--border-focus)"} onBlur={e => e.target.style.borderColor = "transparent"} autoFocus/></div>}
@@ -430,7 +470,7 @@ export default function Dashboard() {
         </div>
       </div>}
 
-      {(chatMenuId || msgMenuId || headerMenu || reactPickerId) && <div className="fixed inset-0 z-[90]" onClick={() => { setChatMenuId(null); setMsgMenuId(null); setMsgMenuPos(null); setHeaderMenu(false); setReactPickerId(null); setShowLabelMenu(null); setChatLabelOpen(null); setShowQuickReplies(false); }}/>}
+      {(chatMenuId || msgMenuId || headerMenu || reactPickerId || sidebarMenu) && <div className="fixed inset-0 z-[90]" onClick={() => { setChatMenuId(null); setMsgMenuId(null); setMsgMenuPos(null); setHeaderMenu(false); setReactPickerId(null); setShowLabelMenu(null); setChatLabelOpen(null); setShowQuickReplies(false); setSidebarMenu(false); }}/>}
     </div>
   );
 }
