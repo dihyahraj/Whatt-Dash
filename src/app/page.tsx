@@ -282,9 +282,12 @@ export default function Dashboard() {
         </div>
 
         {/* ── Filter Chips ── */}
-        <div className="px-3 py-2.5 flex gap-2 overflow-x-auto" style={{ borderBottom: "1px solid var(--border)" }}>
+        <div className="px-3 py-2.5 flex gap-2 overflow-x-auto items-start" style={{ borderBottom: "1px solid var(--border)" }}>
           {[{ id: "all", label: "All" }, { id: "unread", label: "Unread" }].map(f => <button key={f.id} onClick={() => setFilter(f.id)} className="px-3.5 py-[6px] rounded-full text-[12px] font-semibold flex-shrink-0 tr" style={{ background: filter === f.id ? "var(--primary)" : "var(--surface-3)", color: filter === f.id ? "var(--primary-text)" : "var(--text-3)", boxShadow: filter === f.id ? "var(--shadow-sm)" : "none" }}>{f.label}</button>)}
-          {labels.map(l => <button key={l.id} onClick={() => setFilter(filter === l.id ? "all" : l.id)} className="px-3.5 py-[6px] rounded-full text-[12px] font-semibold flex-shrink-0 tr flex items-center gap-1.5" style={{ background: filter === l.id ? l.color : "var(--surface-3)", color: filter === l.id ? "#fff" : "var(--text-3)" }}><span className="w-2 h-2 rounded-full" style={{ background: filter === l.id ? "#fff" : l.color }}/>{l.name}</button>)}
+          {labels.map(l => <button key={l.id} onClick={() => setFilter(filter === l.id ? "all" : l.id)} className="px-3.5 py-[5px] rounded-xl text-[12px] font-semibold flex-shrink-0 tr flex flex-col items-center gap-0" style={{ background: filter === l.id ? l.color : "var(--surface-3)", color: filter === l.id ? "#fff" : "var(--text-3)", minWidth: 60 }}>
+            <div className="flex items-center gap-1.5"><span className="w-2 h-2 rounded-full" style={{ background: filter === l.id ? "#fff" : l.color }}/><span>{l.name}</span></div>
+            <span className="text-[9px] font-medium" style={{ opacity: 0.6 }}>{l.created_by_role === "admin" ? "Admin" : (l.created_by_name || "")}</span>
+          </button>)}
         </div>
 
         {/* ── Conversation List ── */}
