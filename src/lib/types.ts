@@ -69,6 +69,15 @@ export interface Label {
   color: string;
 }
 
+export interface QuickReply {
+  id: string;
+  title: string;
+  content: string;
+  category: string | null;
+  usage_count: number;
+  created_at: string;
+}
+
 // WhatsApp Cloud API webhook payload types
 export interface WhatsAppWebhookBody {
   object: string;

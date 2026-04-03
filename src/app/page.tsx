@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
-import type { ConversationWithLastMessage, Message, MessageType, Label } from "@/lib/types";
+import type { ConversationWithLastMessage, Message, MessageType, Label, QuickReply } from "@/lib/types";
 
 const EMOJIS: Record<string, string[]> = {
   "😀": ["😀","😃","😄","😁","😅","😂","🤣","😊","😇","🙂","😉","😌","😍","🥰","😘","😗","😙","😚","😋","😛","😝","😜","🤪","🤨","🧐","🤓","😎","🥸","🤩","🥳","😏","😒","😞","😔","😟","😕","🙁","😣","😖","😫","😩","🥺","😢","😭","😤","😠","😡","🤬","🤯","😳","🥵","🥶","😱","😨","😰","😥","😓","🤗","🤔","🤭","🤫","🤥","😶","😐","😑","😬","🙄","😯","😦","😧","😮","😲","🥱","😴","🤤","😪","😵","🤐","🥴","🤢","🤮","🤧","😷","🤒","🤕","🤑","🤠","😈","👿","👹","👺","🤡","💩","👻","💀","👽","👾","🤖","🎃"],
@@ -56,6 +56,14 @@ export default function Dashboard() {
   const [newLabelColor, setNewLabelColor] = useState("#10b981");
   const [forwardMsg, setForwardMsg] = useState<Message | null>(null);
   const [forwardSelected, setForwardSelected] = useState<Set<string>>(new Set());
+  const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
+  const [showQuickReplies, setShowQuickReplies] = useState(false);
+  const [qrMode, setQrMode] = useState<"list" | "add" | "edit">("list");
+  const [qrTitle, setQrTitle] = useState("");
+  const [qrContent, setQrContent] = useState("");
+  const [qrCategory, setQrCategory] = useState("");
+  const [qrEditId, setQrEditId] = useState<string | null>(null);
+  const [qrSearch, setQrSearch] = useState("");
 
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -83,8 +91,37 @@ export default function Dashboard() {
   }, []);
   const fetchArchived = useCallback(async () => { if (skipPollRef.current) return; try { const r = await fetch("/api/conversations/archived"); if (skipPollRef.current) return; const d = await r.json(); if (skipPollRef.current) return; if (Array.isArray(d)) setArchived(d); } catch {} }, []);
   const fetchLabels = useCallback(async () => { try { const r = await fetch("/api/labels"); const d = await r.json(); if (Array.isArray(d)) setLabels(d); } catch {} }, []);
+  const fetchQuickReplies = useCallback(async () => { try { const r = await fetch("/api/quick-replies"); const d = await r.json(); if (Array.isArray(d)) setQuickReplies(d); } catch {} }, []);
 
-  useEffect(() => { fetchConvos(); fetchArchived(); fetchLabels(); }, [fetchConvos, fetchArchived, fetchLabels]);
+  async function createQuickReply() {
+    if (!qrTitle.trim() || !qrContent.trim()) return;
+    try {
+      const r = await fetch("/api/quick-replies", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: qrTitle, content: qrContent, category: qrCategory || null }) });
+      if (r.ok) { fetchQuickReplies(); setQrTitle(""); setQrContent(""); setQrCategory(""); setQrMode("list"); }
+    } catch {}
+  }
+  async function updateQuickReply() {
+    if (!qrEditId || !qrTitle.trim() || !qrContent.trim()) return;
+    try {
+      const r = await fetch(`/api/quick-replies/${qrEditId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: qrTitle, content: qrContent, category: qrCategory || null }) });
+      if (r.ok) { fetchQuickReplies(); setQrTitle(""); setQrContent(""); setQrCategory(""); setQrEditId(null); setQrMode("list"); }
+    } catch {}
+  }
+  async function deleteQuickReply(id: string) {
+    if (!confirm("Delete this quick reply?")) return;
+    try { await fetch(`/api/quick-replies/${id}`, { method: "DELETE" }); fetchQuickReplies(); } catch {}
+  }
+  function useQuickReply(qr: QuickReply) {
+    // Replace {name} and {phone} with current chat info
+    let text = qr.content;
+    if (sel) { text = text.replace(/\{name\}/g, sel.name || sel.phone).replace(/\{phone\}/g, sel.phone); }
+    setInput(text);
+    setShowQuickReplies(false);
+    inputRef.current?.focus();
+    fetch(`/api/quick-replies/${qr.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ use: true }) }).catch(() => {});
+  }
+
+  useEffect(() => { fetchConvos(); fetchArchived(); fetchLabels(); fetchQuickReplies(); }, [fetchConvos, fetchArchived, fetchLabels, fetchQuickReplies]);
   useEffect(() => { if (selId) { fetchMsgs(selId); fetch(`/api/conversations/${selId}/read`, { method: "POST" }).catch(() => {}); setConvos((p) => p.map((c) => c.id === selId ? { ...c, unread_count: 0 } : c)); setIsAtBottom(true); } }, [selId, fetchMsgs]);
 
   // Only auto-scroll when user is at bottom
@@ -758,9 +795,63 @@ export default function Dashboard() {
               </div>
             )}
 
+            {/* Quick Replies Panel */}
+            {showQuickReplies && (
+              <div className="mx-4 sm:mx-16 mb-1 bg-[#182229] rounded-xl border border-white/[0.08] shadow-2xl overflow-hidden" onClick={(e) => e.stopPropagation()} style={{ maxHeight: 360 }}>
+                <div className="flex items-center justify-between px-3 py-2 border-b border-white/[0.06]">
+                  <span className="text-[13px] font-semibold text-white/80">⚡ Quick Replies</span>
+                  <div className="flex gap-1">
+                    {qrMode === "list" && <button onClick={() => { setQrMode("add"); setQrTitle(""); setQrContent(""); setQrCategory(""); }} className="text-[11px] bg-emerald-600 hover:bg-emerald-500 text-white px-2.5 py-1 rounded-md">+ New</button>}
+                    {qrMode !== "list" && <button onClick={() => { setQrMode("list"); setQrEditId(null); }} className="text-[11px] text-white/50 hover:text-white/80 px-2 py-1">← Back</button>}
+                    <button onClick={() => setShowQuickReplies(false)} className="text-white/30 hover:text-white/60 text-lg leading-none">✕</button>
+                  </div>
+                </div>
+                {qrMode === "list" && (
+                  <>
+                    <div className="px-3 py-2 border-b border-white/[0.06]">
+                      <input type="text" value={qrSearch} onChange={(e) => setQrSearch(e.target.value)} placeholder="Search replies..." className="w-full bg-white/[0.05] rounded-md px-3 py-1.5 text-[12px] text-white placeholder:text-white/25 focus:outline-none border border-white/[0.06]"/>
+                    </div>
+                    <div className="overflow-y-auto" style={{ maxHeight: 240 }}>
+                      {quickReplies.filter((qr) => !qrSearch || qr.title.toLowerCase().includes(qrSearch.toLowerCase()) || qr.content.toLowerCase().includes(qrSearch.toLowerCase())).length === 0 ? (
+                        <div className="px-4 py-8 text-center text-[13px] text-white/30">{quickReplies.length === 0 ? "No quick replies yet. Click + New to create one." : "No matches found."}</div>
+                      ) : (
+                        quickReplies.filter((qr) => !qrSearch || qr.title.toLowerCase().includes(qrSearch.toLowerCase()) || qr.content.toLowerCase().includes(qrSearch.toLowerCase())).map((qr) => (
+                          <div key={qr.id} className="flex items-start gap-2 px-3 py-2.5 hover:bg-white/[0.04] group cursor-pointer border-b border-white/[0.03]" onClick={() => useQuickReply(qr)}>
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="text-[12px] font-semibold text-emerald-400 truncate">{qr.title}</span>
+                                {qr.category && <span className="text-[10px] bg-white/[0.08] text-white/40 px-1.5 py-0.5 rounded">{qr.category}</span>}
+                                <span className="text-[10px] text-white/20 ml-auto flex-shrink-0">used {qr.usage_count}x</span>
+                              </div>
+                              <p className="text-[12px] text-white/50 truncate mt-0.5">{qr.content}</p>
+                            </div>
+                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 flex-shrink-0 mt-0.5">
+                              <button onClick={(e) => { e.stopPropagation(); setQrMode("edit"); setQrEditId(qr.id); setQrTitle(qr.title); setQrContent(qr.content); setQrCategory(qr.category || ""); }} className="text-[10px] text-white/30 hover:text-white/60 p-1">✏️</button>
+                              <button onClick={(e) => { e.stopPropagation(); deleteQuickReply(qr.id); }} className="text-[10px] text-white/30 hover:text-red-400 p-1">🗑️</button>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </>
+                )}
+                {(qrMode === "add" || qrMode === "edit") && (
+                  <div className="px-3 py-3 space-y-2.5">
+                    <input type="text" value={qrTitle} onChange={(e) => setQrTitle(e.target.value)} placeholder="Title (e.g. Greeting, Price, Delivery)" className="w-full bg-white/[0.05] rounded-md px-3 py-2 text-[13px] text-white placeholder:text-white/25 focus:outline-none border border-white/[0.06]"/>
+                    <textarea value={qrContent} onChange={(e) => setQrContent(e.target.value)} placeholder={"Message content...\nUse {name} for customer name\nUse {phone} for phone number"} rows={3} className="w-full bg-white/[0.05] rounded-md px-3 py-2 text-[13px] text-white placeholder:text-white/25 focus:outline-none border border-white/[0.06] resize-none"/>
+                    <input type="text" value={qrCategory} onChange={(e) => setQrCategory(e.target.value)} placeholder="Category (optional — e.g. Sales, Support)" className="w-full bg-white/[0.05] rounded-md px-3 py-2 text-[13px] text-white placeholder:text-white/25 focus:outline-none border border-white/[0.06]"/>
+                    <button onClick={qrMode === "edit" ? updateQuickReply : createQuickReply} disabled={!qrTitle.trim() || !qrContent.trim()} className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-30 text-white font-medium py-2 rounded-md text-[13px]">
+                      {qrMode === "edit" ? "Update" : "Save"} Quick Reply
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Input */}
             <div className="px-4 sm:px-12 py-2 flex items-end gap-2" style={{ background: "#202c33" }}>
-              <button onClick={(e) => { e.stopPropagation(); setShowEmoji(!showEmoji); }} className="w-10 h-10 rounded-full hover:bg-white/[0.08] flex items-center justify-center text-white/40 text-[22px] flex-shrink-0">😀</button>
+              <button onClick={(e) => { e.stopPropagation(); setShowEmoji(!showEmoji); setShowQuickReplies(false); }} className="w-10 h-10 rounded-full hover:bg-white/[0.08] flex items-center justify-center text-white/40 text-[22px] flex-shrink-0">😀</button>
+              <button onClick={(e) => { e.stopPropagation(); setShowQuickReplies(!showQuickReplies); setShowEmoji(false); setQrMode("list"); setQrSearch(""); }} className="w-10 h-10 rounded-full hover:bg-white/[0.08] flex items-center justify-center text-white/40 text-[18px] flex-shrink-0" title="Quick Replies">⚡</button>
               <button onClick={() => document.getElementById("file-input")?.click()} className="w-10 h-10 rounded-full hover:bg-white/[0.08] flex items-center justify-center text-white/40 flex-shrink-0" title="Attach file">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
               </button>
@@ -850,7 +941,7 @@ export default function Dashboard() {
       )}
 
       {/* Click-away to close menus */}
-      {(chatMenuId || msgMenuId || headerMenu || reactPickerId) && <div className="fixed inset-0 z-[90]" onClick={() => { setChatMenuId(null); setMsgMenuId(null); setHeaderMenu(false); setReactPickerId(null); setShowLabelMenu(null); setChatLabelOpen(null); }}/>}
+      {(chatMenuId || msgMenuId || headerMenu || reactPickerId) && <div className="fixed inset-0 z-[90]" onClick={() => { setChatMenuId(null); setMsgMenuId(null); setHeaderMenu(false); setReactPickerId(null); setShowLabelMenu(null); setChatLabelOpen(null); setShowQuickReplies(false); }}/>}
     </div>
   );
 }
