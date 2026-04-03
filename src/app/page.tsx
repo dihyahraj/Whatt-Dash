@@ -254,12 +254,19 @@ export default function Dashboard() {
     if (!supabase) return;
     setMfaError(""); setMfa2FAState("enrolling");
     try {
-      // Clean up any non-verified factors first
-      const { data: factors } = await supabase.auth.mfa.listFactors();
-      const leftover = factors?.totp?.filter(f => f.status !== "verified") || [];
-      for (const f of leftover) { await supabase.auth.mfa.unenroll({ factorId: f.id }).catch(() => {}); }
-      // Now enroll fresh
-      const { data, error } = await supabase.auth.mfa.enroll({ factorType: "totp", friendlyName: "Whatt Dash" });
+      // Try to clean up old factors first
+      try {
+        const { data: factors } = await supabase.auth.mfa.listFactors();
+        const allTotp = factors?.totp || [];
+        for (const f of allTotp) {
+          if (f.status !== "verified") {
+            await supabase.auth.mfa.unenroll({ factorId: f.id }).catch(() => {});
+          }
+        }
+      } catch {}
+      // Enroll with unique name to avoid conflict
+      const name = `Whatt Dash ${Date.now()}`;
+      const { data, error } = await supabase.auth.mfa.enroll({ factorType: "totp", friendlyName: name });
       if (error || !data) { setMfaError(error?.message || "Failed to enroll"); setMfa2FAState("idle"); return; }
       setMfaQR(data.totp.qr_code);
       setMfaSecret(data.totp.secret);
