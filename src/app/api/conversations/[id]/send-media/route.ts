@@ -14,42 +14,13 @@ export async function POST(
   const forceType = formData.get("forceType") as string || "";
 
   if (!file) return Response.json({ error: "No file" }, { status: 400 });
-
-  // Detect correct MIME early (mobile browsers often send wrong/empty types)
-  const ext = file.name.split(".").pop()?.toLowerCase() || "bin";
-  const mimeMap: Record<string, string> = {
-    jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp",
-    mp4: "video/mp4", mov: "video/mp4", avi: "video/mp4", mkv: "video/mp4", "3gp": "video/3gpp",
-    mp3: "audio/mpeg", ogg: "audio/ogg", m4a: "audio/mp4", wav: "audio/wav", opus: "audio/opus",
-    aac: "audio/aac", amr: "audio/amr",
-    pdf: "application/pdf", doc: "application/msword",
-    docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    xls: "application/vnd.ms-excel",
-    xlsx: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  };
-  // WhatsApp unsupported MIME types that need remapping
-  const unsupportedMimes: Record<string, string> = {
-    "video/quicktime": "video/mp4",
-    "video/x-msvideo": "video/mp4",
-    "video/x-matroska": "video/mp4",
-    "audio/m4a": "audio/mp4",
-    "audio/mp3": "audio/mpeg",
-    "audio/x-wav": "audio/wav",
-  };
-  let mimeType = file.type || "";
-  // Fix unsupported MIME types
-  if (unsupportedMimes[mimeType]) mimeType = unsupportedMimes[mimeType];
-  // Fallback: detect from extension if empty/generic
-  if (!mimeType || mimeType === "application/octet-stream") {
-    mimeType = mimeMap[ext] || "application/octet-stream";
-  }
-
-  // WhatsApp file size limits (using corrected mimeType)
-  const maxSize = mimeType.startsWith("video/") ? 16 * 1024 * 1024 : 
-                  mimeType.startsWith("image/") ? 5 * 1024 * 1024 :
-                  mimeType.startsWith("audio/") ? 16 * 1024 * 1024 : 100 * 1024 * 1024;
+  
+  // WhatsApp file size limits
+  const maxSize = file.type?.startsWith("video/") ? 16 * 1024 * 1024 : 
+                  file.type?.startsWith("image/") ? 5 * 1024 * 1024 :
+                  file.type?.startsWith("audio/") ? 16 * 1024 * 1024 : 100 * 1024 * 1024;
   if (file.size > maxSize) {
-    return Response.json({ error: `File too large (${(file.size/1024/1024).toFixed(1)}MB). Max: ${(maxSize/1024/1024).toFixed(0)}MB for ${mimeType.split("/")[0] || "this type"}` }, { status: 400 });
+    return Response.json({ error: `File too large (${(file.size/1024/1024).toFixed(1)}MB). Max: ${(maxSize/1024/1024).toFixed(0)}MB for ${file.type?.split("/")[0] || "this type"}` }, { status: 400 });
   }
 
   const { data: convo } = await supabase.from("conversations").select("phone").eq("id", id).single();
@@ -66,11 +37,12 @@ export async function POST(
 
   try {
     // 1. Upload to Supabase Storage (for dashboard display)
+    const ext = file.name.split(".").pop()?.toLowerCase() || "bin";
     const safeName = `${Date.now()}_sent.${ext}`;
     const storagePath = `media/${safeName}`;
     await sb.storage.createBucket("whatsapp-media", { public: true }).catch(() => {});
     const { error: uploadErr } = await sb.storage.from("whatsapp-media").upload(storagePath, buffer, {
-      contentType: mimeType, cacheControl: "31536000", upsert: false,
+      contentType: file.type || "application/octet-stream", cacheControl: "31536000", upsert: false,
     });
     if (uploadErr) return Response.json({ error: "Storage upload failed: " + uploadErr.message }, { status: 500 });
     const rawPublicUrl = sb.storage.from("whatsapp-media").getPublicUrl(storagePath).data.publicUrl;
@@ -82,25 +54,37 @@ export async function POST(
       : rawPublicUrl;
 
     // 2. Determine WhatsApp message type
+    // Detect MIME from extension if file.type is empty (mobile browsers)
+    let mimeType = file.type;
+    if (!mimeType || mimeType === "application/octet-stream") {
+      const mimeMap: Record<string, string> = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp", mp4: "video/mp4", mov: "video/quicktime", avi: "video/x-msvideo", mkv: "video/x-matroska", mp3: "audio/mpeg", ogg: "audio/ogg", m4a: "audio/mp4", wav: "audio/wav", opus: "audio/opus", pdf: "application/pdf", doc: "application/msword", docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" };
+      mimeType = mimeMap[ext] || "application/octet-stream";
+    }
+
     let waType = "document";
     if (mimeType.startsWith("image/")) waType = "image";
     else if (mimeType.startsWith("video/")) waType = "video";
-    else if (mimeType.startsWith("audio/")) waType = "audio";
+    else if (
+      mimeType === "audio/aac" || mimeType === "audio/amr" || mimeType === "audio/mpeg" ||
+      mimeType === "audio/mp4" || mimeType === "audio/mp3" || mimeType === "audio/m4a" ||
+      mimeType.startsWith("audio/ogg") || mimeType === "audio/opus" || mimeType === "audio/wav"
+    ) waType = "audio";
 
     // Override with forceType if provided
     if (forceType === "document" || forceType === "audio") waType = forceType;
 
-    console.log(`[SEND-MEDIA] waType: ${waType}, mimeType: ${mimeType}, forceType: ${forceType}`);
+    console.log(`[SEND-MEDIA] waType: ${waType}, forceType: ${forceType}`);
 
     // 3. Upload file to WhatsApp Media API → get media_id
-    console.log(`[SEND-MEDIA] Uploading to WhatsApp Media API... mimeType: ${mimeType}, originalType: ${file.type}, size: ${file.size}, name: ${file.name}`);
+    const uploadMime = file.type || mimeType;
+    console.log(`[SEND-MEDIA] Uploading to WhatsApp Media API... uploadMime: ${uploadMime}, fileType: ${file.type}, detected: ${mimeType}, size: ${file.size}, name: ${file.name}`);
     
-    // Create a proper File object for Meta API with corrected MIME
-    const metaFile = new File([buffer], file.name, { type: mimeType });
+    // Create a proper File object for Meta API
+    const metaFile = new File([buffer], file.name, { type: uploadMime });
     const uploadForm = new FormData();
     uploadForm.append("messaging_product", "whatsapp");
     uploadForm.append("file", metaFile);
-    uploadForm.append("type", mimeType);
+    uploadForm.append("type", uploadMime);
 
     const uploadRes = await fetch(`${GRAPH_API}/${phoneId}/media`, {
       method: "POST",
