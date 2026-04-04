@@ -979,12 +979,17 @@ function VoicePlayer({ src, msgId }: { src: string; msgId: string }) {
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   const [currentTime, setCurrent] = useState(0);
-  // Generate stable waveform bars from msgId
   const bars = useMemo(() => {
     const b: number[] = [];
     let seed = 0;
     for (let i = 0; i < msgId.length; i++) seed = ((seed << 5) - seed + msgId.charCodeAt(i)) | 0;
-    for (let i = 0; i < 40; i++) { seed = (seed * 16807 + 12345) & 0x7fffffff; b.push(0.15 + (seed % 100) / 100 * 0.85); }
+    for (let i = 0; i < 48; i++) {
+      seed = (seed * 16807 + 12345) & 0x7fffffff;
+      const raw = (seed % 100) / 100;
+      // Smooth: blend with neighbors for organic look
+      const prev = b.length > 0 ? b[b.length - 1] : 0.4;
+      b.push(0.18 + (raw * 0.4 + prev * 0.6) * 0.82);
+    }
     return b;
   }, [msgId]);
 
@@ -993,9 +998,7 @@ function VoicePlayer({ src, msgId }: { src: string; msgId: string }) {
     const onTime = () => { setCurrent(a.currentTime); setProgress(a.duration ? a.currentTime / a.duration : 0); };
     const onMeta = () => setDuration(a.duration || 0);
     const onEnd = () => { setPlaying(false); setProgress(0); setCurrent(0); };
-    a.addEventListener("timeupdate", onTime);
-    a.addEventListener("loadedmetadata", onMeta);
-    a.addEventListener("ended", onEnd);
+    a.addEventListener("timeupdate", onTime); a.addEventListener("loadedmetadata", onMeta); a.addEventListener("ended", onEnd);
     return () => { a.removeEventListener("timeupdate", onTime); a.removeEventListener("loadedmetadata", onMeta); a.removeEventListener("ended", onEnd); };
   }, []);
 
@@ -1004,24 +1007,19 @@ function VoicePlayer({ src, msgId }: { src: string; msgId: string }) {
   const fmt = (s: number) => { if (!s || !isFinite(s)) return "0:00"; const m = Math.floor(s / 60); return `${m}:${String(Math.floor(s % 60)).padStart(2, "0")}`; };
 
   return (
-    <div className="flex items-center gap-2.5 min-w-[220px] sm:min-w-[260px]">
+    <div className="flex items-center gap-3" style={{ width: 260 }}>
       <audio ref={audioRef} src={src} preload="metadata"/>
-      <button onClick={toggle} className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 tr" style={{ background: "var(--primary)" }}>
-        <span className="material-symbols-rounded" style={{ fontSize: 20, color: "var(--primary-text)", fontVariationSettings: "'FILL' 1" }}>{playing ? "pause" : "play_arrow"}</span>
+      <button onClick={toggle} className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: "var(--primary)" }}>
+        <span className="material-symbols-rounded" style={{ fontSize: 22, color: "var(--primary-text)", fontVariationSettings: "'FILL' 1" }}>{playing ? "pause" : "play_arrow"}</span>
       </button>
-      <div className="flex-1 flex flex-col gap-1">
-        {/* Waveform */}
-        <div className="flex items-end gap-[2px] h-[28px] cursor-pointer" onClick={seek}>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-[1.5px] h-[32px] cursor-pointer" onClick={seek}>
           {bars.map((h, i) => {
             const filled = i / bars.length <= progress;
-            return <div key={i} className="flex-1 rounded-full tr" style={{ height: `${h * 100}%`, minWidth: 2, background: filled ? "var(--primary)" : "var(--text-4)", opacity: filled ? 1 : 0.35, transition: "background 0.1s, opacity 0.1s" }}/>;
+            return <div key={i} className="rounded-full" style={{ width: 3, height: `${h * 100}%`, background: filled ? "var(--primary)" : "var(--text-4)", opacity: filled ? 1 : 0.3, transition: "background 0.15s, opacity 0.15s" }}/>;
           })}
         </div>
-        {/* Time */}
-        <div className="flex justify-between">
-          <span className="text-[10px] font-medium tabular-nums" style={{ color: "var(--text-3)" }}>{fmt(currentTime)}</span>
-          <span className="text-[10px] font-medium tabular-nums" style={{ color: "var(--text-4)" }}>{fmt(duration)}</span>
-        </div>
+        <p className="text-[10px] font-medium mt-0.5 tabular-nums" style={{ color: "var(--text-3)" }}>{playing || currentTime > 0 ? fmt(currentTime) : fmt(duration)}</p>
       </div>
     </div>
   );
