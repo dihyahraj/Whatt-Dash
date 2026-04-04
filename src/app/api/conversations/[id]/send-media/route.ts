@@ -68,11 +68,14 @@ export async function POST(
     console.log(`[SEND-MEDIA] waType: ${waType}, forceType: ${forceType}`);
 
     // 3. Upload file to WhatsApp Media API → get media_id
-    console.log(`[SEND-MEDIA] Uploading to WhatsApp Media API... mime: ${mimeType}`);
+    // Use original file.type for Meta (they validate against actual content)
+    const uploadMime = file.type || mimeType;
+    console.log(`[SEND-MEDIA] Uploading to WhatsApp Media API... uploadMime: ${uploadMime}, detected: ${mimeType}, original: ${file.type}, size: ${file.size}`);
+    
     const uploadForm = new FormData();
     uploadForm.append("messaging_product", "whatsapp");
-    uploadForm.append("file", new Blob([arrayBuffer], { type: mimeType }), safeName);
-    uploadForm.append("type", mimeType);
+    uploadForm.append("file", new Blob([buffer], { type: uploadMime }), file.name);
+    uploadForm.append("type", uploadMime);
 
     const uploadRes = await fetch(`${GRAPH_API}/${phoneId}/media`, {
       method: "POST",
