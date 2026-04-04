@@ -11,6 +11,7 @@ export async function POST(
   const formData = await request.formData();
   const file = formData.get("file") as File | null;
   const caption = formData.get("caption") as string || "";
+  const forceType = formData.get("forceType") as string || "";
 
   if (!file) return Response.json({ error: "No file" }, { status: 400 });
 
@@ -52,7 +53,10 @@ export async function POST(
       file.type.startsWith("audio/ogg")
     ) waType = "audio";
 
-    console.log(`[SEND-MEDIA] waType: ${waType}`);
+    // Override with forceType if provided
+    if (forceType === "document" || forceType === "audio") waType = forceType;
+
+    console.log(`[SEND-MEDIA] waType: ${waType}, forceType: ${forceType}`);
 
     // 3. Upload file to WhatsApp Media API → get media_id
     console.log(`[SEND-MEDIA] Uploading to WhatsApp Media API...`);

@@ -173,7 +173,7 @@ export default function Dashboard() {
     if (pastePreview) URL.revokeObjectURL(pastePreview);
     setPasteFile(null); setPastePreview(null); setPasteCaption(""); setPasteRotation(0); setPasteForceType(null);
     try {
-      const fd = new FormData(); fd.append("file", f); fd.append("caption", caption);
+      const fd = new FormData(); fd.append("file", f); fd.append("caption", caption); if (pasteForceType) fd.append("forceType", pasteForceType);
       const res = await fetch(`/api/conversations/${selId}/send-media`, { method: "POST", body: fd });
       if (!res.ok) { setMsgs(p => p.filter(m => m.id !== tid)); const d = await res.json(); alert("Error: " + JSON.stringify(d)); setSending(false); }
       else { const real = await res.json(); lastSentIdsRef.current.add(real.id); setMsgs(p => p.map(m => m.id === tid ? { ...real } : m)); setTimeout(() => { setSending(false); setTimeout(() => lastSentIdsRef.current.delete(real.id), 10000); }, 3000); }
