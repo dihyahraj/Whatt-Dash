@@ -184,7 +184,7 @@ export default function Dashboard() {
     const text = input.trim(); const reply = replyTo;
     const tempId = `temp_${Date.now()}`;
     const om: Message = { id: tempId, conversation_id: selId, role: "assistant", content: text, message_type: "text", media_url: null, media_mime_type: null, media_filename: null, media_caption: null, media_sha256: null, reply_to_id: reply?.id || null, reaction: null, reaction_msg_id: null, latitude: null, longitude: null, location_name: null, location_address: null, whatsapp_msg_id: null, is_deleted: false, is_starred: false, status: "sent", created_at: new Date().toISOString() };
-    setMsgs(p => [...p, om]); setInput(""); setReplyTo(null); if (inputRef.current) inputRef.current.style.height = "auto"; setIsAtBottom(true); setSending(true);
+    setMsgs(p => [...p, om]); setInput(""); setReplyTo(null); setTimeout(() => smoothResizeInput(), 20); setIsAtBottom(true); setSending(true);
     try { const b: Record<string, string> = { message: text }; if (reply) { b.replyToMsgId = reply.id; if (reply.whatsapp_msg_id) b.replyToWhatsappId = reply.whatsapp_msg_id; } const r = await fetch(`/api/conversations/${selId}/send`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(b) }); if (!r.ok) { setMsgs(p => p.filter(m => m.id !== tempId)); const d = await r.json(); alert("Error:\n" + JSON.stringify(d, null, 2)); setInput(text); return; } const real = await r.json(); lastSentIdsRef.current.add(real.id); setMsgs(p => p.map(m => m.id === tempId ? { ...real } : m)); setTimeout(() => { setSending(false); setTimeout(() => lastSentIdsRef.current.delete(real.id), 10000); }, 3000); } catch (e) { setMsgs(p => p.filter(m => m.id !== tempId)); setInput(text); alert("Network Error: " + String(e)); setSending(false); }
   }
 
@@ -573,7 +573,7 @@ export default function Dashboard() {
                 })()}
                 <textarea ref={inputRef} value={input} onFocus={() => setInputFocused(true)} onBlur={() => setInputFocused(false)} onChange={e => {
                   const v = e.target.value; setInput(v);
-                  e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
+                  smoothResizeInput();
                   if (v.startsWith("/")) { setSlashActive(true); setSlashQuery(v.slice(1)); setSlashIdx(0); }
                   else { setSlashActive(false); setSlashQuery(""); }
                 }} onKeyDown={e => {
