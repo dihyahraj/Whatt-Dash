@@ -1009,17 +1009,17 @@ function VoicePlayer({ src, msgId }: { src: string; msgId: string }) {
   return (
     <div className="flex items-center gap-3" style={{ width: 260 }}>
       <audio ref={audioRef} src={src} preload="metadata"/>
-      <button onClick={toggle} className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: "var(--primary)" }}>
-        <span className="material-symbols-rounded" style={{ fontSize: 22, color: "var(--primary-text)", fontVariationSettings: "'FILL' 1" }}>{playing ? "pause" : "play_arrow"}</span>
+      <button onClick={toggle} className="w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0 shadow-md" style={{ background: "var(--primary)", boxShadow: "0 2px 8px var(--primary-glow)" }}>
+        <span className="material-symbols-rounded" style={{ fontSize: 24, color: "var(--primary-text)", fontVariationSettings: "'FILL' 1" }}>{playing ? "pause" : "play_arrow"}</span>
       </button>
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-[1.5px] h-[32px] cursor-pointer" onClick={seek}>
+        <div className="flex items-end gap-[1.5px] h-[32px] cursor-pointer" onClick={seek}>
           {bars.map((h, i) => {
             const filled = i / bars.length <= progress;
-            return <div key={i} className="rounded-full" style={{ width: 3, height: `${h * 100}%`, background: filled ? "var(--primary)" : "var(--text-4)", opacity: filled ? 1 : 0.3, transition: "background 0.15s, opacity 0.15s" }}/>;
+            return <div key={i} className="rounded-full" style={{ width: 3, height: `${h * 100}%`, minHeight: 4, background: filled ? "var(--primary)" : "var(--text-4)", opacity: filled ? 1 : 0.3, transition: "background 0.15s, opacity 0.15s" }}/>;
           })}
         </div>
-        <p className="text-[10px] font-medium mt-0.5 tabular-nums" style={{ color: "var(--text-3)" }}>{playing || currentTime > 0 ? fmt(currentTime) : fmt(duration)}</p>
+        <p className="text-[10px] font-medium mt-1 tabular-nums" style={{ color: "var(--text-3)" }}>{playing || currentTime > 0 ? fmt(currentTime) : fmt(duration)}</p>
       </div>
     </div>
   );
