@@ -1020,7 +1020,7 @@ function VoicePlayer({ src, msgId, time, isMe, status }: { src: string; msgId: s
           })}
         </div>
         <div className="flex items-center justify-between mt-1">
-          <span className="text-[10px] font-semibold tabular-nums" style={{ color: playing ? "var(--primary)" : "var(--text-3)" }}>{playing || currentTime > 0 ? fmt(currentTime) : fmt(duration)}</span>
+          <span className="text-[10px] font-semibold tabular-nums" style={{ color: playing ? "var(--primary)" : "var(--text-3)" }}>{playing ? fmt(currentTime) : fmt(duration)}</span>
           {time && <div className="flex items-center gap-0.5">
             <span className="text-[10px]" style={{ color: isMe ? "var(--bubble-me-meta)" : "var(--text-4)" }}>{time}</span>
             {isMe && status === "sent" && <span className="material-symbols-rounded" style={{ fontSize: 14, color: "var(--bubble-me-meta)" }}>check</span>}
