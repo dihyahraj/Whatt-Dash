@@ -15,8 +15,8 @@ export async function POST(
 
   if (!file) return Response.json({ error: "No file" }, { status: 400 });
   
-  // WhatsApp file size limits
-  const maxSize = file.type?.startsWith("video/") ? 16 * 1024 * 1024 : 
+  // WhatsApp file size limits (video slightly under 16MB to account for upload overhead)
+  const maxSize = file.type?.startsWith("video/") ? 15 * 1024 * 1024 : 
                   file.type?.startsWith("image/") ? 5 * 1024 * 1024 :
                   file.type?.startsWith("audio/") ? 16 * 1024 * 1024 : 100 * 1024 * 1024;
   if (file.size > maxSize) {
