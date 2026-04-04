@@ -557,7 +557,7 @@ export default function Dashboard() {
                     <div className="overflow-y-auto" style={{ maxHeight: 200 }}>
                       {matches.map((qr, i) => <button key={qr.id} onClick={() => selectSlashQR(qr)} className="w-full flex items-start gap-2 px-3 py-2.5 text-left tr" style={{ background: i === slashIdx ? "var(--primary-muted)" : "transparent" }}>
                         <span className="text-[12px] font-bold flex-shrink-0" style={{ color: "var(--primary)" }}>{qr.title}</span>
-                        <span className="text-[11px] truncate flex-1" style={{ color: "var(--text-3)" }}>{qr.content.slice(0, 50)}</span>
+                        <span className="text-[11px] truncate flex-1" style={{ color: "var(--text-3)" }}>{qr.content}</span>
                       </button>)}
                     </div>
                   </div>;
