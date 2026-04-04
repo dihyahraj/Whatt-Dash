@@ -81,6 +81,7 @@ export default function Dashboard() {
   const [pasteFile, setPasteFile] = useState<File|null>(null);
   const [pastePreview, setPastePreview] = useState<string|null>(null);
   const [pasteCaption, setPasteCaption] = useState("");
+  const [pasteRotation, setPasteRotation] = useState(0);
   const [headerMenu, setHeaderMenu] = useState(false);
   const [chatSearch, setChatSearch] = useState("");
   const [showChatSearch, setShowChatSearch] = useState(false);
@@ -159,21 +160,24 @@ export default function Dashboard() {
   async function sendPasteFile() {
     if (!pasteFile || !selId) return;
     const f = pasteFile;
+    const caption = pasteCaption; // Save before clearing state
     const ic = f.type.startsWith("image/") ? "📷" : f.type.startsWith("video/") ? "🎥" : "📄";
     const tid = `temp_paste_${Date.now()}`;
-    addOptimisticMsg(tid, `${ic} Sending ${f.name}...`, f.type.startsWith("image/") ? "image" : "document");
+    const optContent = caption ? `${ic} ${caption}` : `${ic} Sending ${f.name}...`;
+    const om: Message = { id: tid, conversation_id: selId, role: "assistant", content: optContent, message_type: (f.type.startsWith("image/") ? "image" : "document") as Message["message_type"], media_url: pastePreview, media_mime_type: f.type, media_filename: f.name, media_caption: caption || null, media_sha256: null, reply_to_id: null, reaction: null, reaction_msg_id: null, latitude: null, longitude: null, location_name: null, location_address: null, whatsapp_msg_id: null, is_deleted: false, is_starred: false, status: "sent", created_at: new Date().toISOString() };
+    setMsgs(p => [...p, om]); setIsAtBottom(true);
     setSending(true);
     // Cleanup preview
     if (pastePreview) URL.revokeObjectURL(pastePreview);
-    setPasteFile(null); setPastePreview(null); setPasteCaption("");
+    setPasteFile(null); setPastePreview(null); setPasteCaption(""); setPasteRotation(0);
     try {
-      const fd = new FormData(); fd.append("file", f); fd.append("caption", pasteCaption);
+      const fd = new FormData(); fd.append("file", f); fd.append("caption", caption);
       const res = await fetch(`/api/conversations/${selId}/send-media`, { method: "POST", body: fd });
       if (!res.ok) { setMsgs(p => p.filter(m => m.id !== tid)); const d = await res.json(); alert("Error: " + JSON.stringify(d)); setSending(false); }
       else { const real = await res.json(); lastSentIdsRef.current.add(real.id); setMsgs(p => p.map(m => m.id === tid ? { ...real } : m)); setTimeout(() => { setSending(false); setTimeout(() => lastSentIdsRef.current.delete(real.id), 10000); }, 3000); }
     } catch (err) { setMsgs(p => p.filter(m => m.id !== tid)); alert("Error: " + String(err)); setSending(false); }
   }
-  function cancelPaste() { if (pastePreview) URL.revokeObjectURL(pastePreview); setPasteFile(null); setPastePreview(null); setPasteCaption(""); }
+  function cancelPaste() { if (pastePreview) URL.revokeObjectURL(pastePreview); setPasteFile(null); setPastePreview(null); setPasteCaption(""); setPasteRotation(0); }
 
   /* ═══ EFFECTS (unchanged logic) ═══ */
   useEffect(() => { fetchConvos(); fetchArchived(); fetchLabels(); fetchQuickReplies(); }, [fetchConvos, fetchArchived, fetchLabels, fetchQuickReplies]);
@@ -889,8 +893,16 @@ export default function Dashboard() {
             {/* Preview area */}
             <div className="flex-1 min-h-0 overflow-auto">
               {isImg && pastePreview ? (
-                <div className="p-4 flex items-center justify-center" style={{ background: "var(--surface-3)", minHeight: 200 }}>
-                  <img src={pastePreview} alt="Preview" className="max-w-full max-h-[52vh] object-contain rounded-xl"/>
+                <div className="flex flex-col" style={{ background: "var(--surface-3)" }}>
+                  {/* Image toolbar */}
+                  <div className="flex items-center justify-center gap-1 px-3 py-2" style={{ borderBottom: "1px solid var(--border)" }}>
+                    <button onClick={() => setPasteRotation(r => (r - 90) % 360)} className="w-9 h-9 rounded-xl flex items-center justify-center tr hover:bg-[var(--surface-1)]" style={{ color: "var(--text-3)" }} title="Rotate left"><span className="material-symbols-rounded" style={{ fontSize: 20 }}>rotate_left</span></button>
+                    <button onClick={() => setPasteRotation(r => (r + 90) % 360)} className="w-9 h-9 rounded-xl flex items-center justify-center tr hover:bg-[var(--surface-1)]" style={{ color: "var(--text-3)" }} title="Rotate right"><span className="material-symbols-rounded" style={{ fontSize: 20 }}>rotate_right</span></button>
+                  </div>
+                  {/* Image */}
+                  <div className="p-4 flex items-center justify-center" style={{ minHeight: 200 }}>
+                    <img src={pastePreview} alt="Preview" className="max-w-full max-h-[48vh] object-contain rounded-xl tr" style={{ transform: `rotate(${pasteRotation}deg)` }}/>
+                  </div>
                 </div>
               ) : isVid && pastePreview ? (
                 <div className="p-4 flex items-center justify-center" style={{ background: "#000", minHeight: 200 }}>
