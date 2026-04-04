@@ -76,7 +76,11 @@ export async function POST(
     console.log(`[SEND-MEDIA] waType: ${waType}, forceType: ${forceType}`);
 
     // 3. Upload file to WhatsApp Media API → get media_id
-    const uploadMime = file.type || mimeType;
+    let uploadMime = file.type || mimeType;
+    // Fix: mobile browsers send MIME types WhatsApp doesn't accept
+    if (uploadMime === "video/quicktime") uploadMime = "video/mp4";
+    if (uploadMime === "video/x-msvideo") uploadMime = "video/mp4";
+    if (uploadMime === "video/x-matroska") uploadMime = "video/mp4";
     console.log(`[SEND-MEDIA] Uploading to WhatsApp Media API... uploadMime: ${uploadMime}, fileType: ${file.type}, detected: ${mimeType}, size: ${file.size}, name: ${file.name}`);
     
     // Create a proper File object for Meta API
