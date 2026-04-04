@@ -14,6 +14,14 @@ export async function POST(
   const forceType = formData.get("forceType") as string || "";
 
   if (!file) return Response.json({ error: "No file" }, { status: 400 });
+  
+  // WhatsApp file size limits
+  const maxSize = file.type?.startsWith("video/") ? 16 * 1024 * 1024 : 
+                  file.type?.startsWith("image/") ? 5 * 1024 * 1024 :
+                  file.type?.startsWith("audio/") ? 16 * 1024 * 1024 : 100 * 1024 * 1024;
+  if (file.size > maxSize) {
+    return Response.json({ error: `File too large (${(file.size/1024/1024).toFixed(1)}MB). Max: ${(maxSize/1024/1024).toFixed(0)}MB for ${file.type?.split("/")[0] || "this type"}` }, { status: 400 });
+  }
 
   const { data: convo } = await supabase.from("conversations").select("phone").eq("id", id).single();
   if (!convo) return Response.json({ error: "Conversation not found" }, { status: 404 });
