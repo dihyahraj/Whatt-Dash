@@ -1,6 +1,23 @@
 import { NextRequest } from "next/server";
 import { getSupabase } from "@/lib/supabase";
 
+// PATCH — update label name/color
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  const { id } = await params;
+  const sb = getSupabase();
+  const body = await request.json();
+  const updates: Record<string, string> = {};
+  if (body.name) updates.name = body.name;
+  if (body.color) updates.color = body.color;
+  if (Object.keys(updates).length === 0) return Response.json({ error: "Nothing to update" }, { status: 400 });
+  const { error } = await sb.from("labels").update(updates).eq("id", id);
+  if (error) return Response.json({ error: error.message }, { status: 500 });
+  return Response.json({ success: true });
+}
+
 // DELETE label with permission check
 export async function DELETE(
   request: NextRequest,

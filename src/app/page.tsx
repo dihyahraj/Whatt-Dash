@@ -89,6 +89,10 @@ export default function Dashboard() {
   const [chatLabelOpen, setChatLabelOpen] = useState<string|null>(null);
   const [newLabelName, setNewLabelName] = useState("");
   const [newLabelColor, setNewLabelColor] = useState("#10b981");
+  const [labelMenuId, setLabelMenuId] = useState<string|null>(null);
+  const [editLabelId, setEditLabelId] = useState<string|null>(null);
+  const [editLabelName, setEditLabelName] = useState("");
+  const [editLabelColor, setEditLabelColor] = useState("");
   const [forwardMsg, setForwardMsg] = useState<Message|null>(null);
   const [forwardSelected, setForwardSelected] = useState<Set<string>>(new Set());
   const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
@@ -212,13 +216,24 @@ export default function Dashboard() {
   async function reactMsg(msgId: string, emoji: string) { if (!selId) return; pausePoll(); const m = msgs.find(x => x.id === msgId); const ne = m?.reaction === emoji ? "" : emoji; setMsgs(p => p.map(x => x.id === msgId ? { ...x, reaction: ne || null } : x)); setReactPickerId(null); fetch(`/api/conversations/${selId}/react`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ messageId: msgId, emoji: ne, whatsappMsgId: m?.whatsapp_msg_id || null }) }).catch(() => {}); }
   async function createLabel() { if (!newLabelName.trim()) return; pausePoll(); const tl = { id: `temp_${Date.now()}`, name: newLabelName.trim(), color: newLabelColor, created_by_email: user?.email, created_by_name: user?.display_name, created_by_role: user?.role }; setLabels(p => [...p, tl]); setNewLabelName(""); fetch("/api/labels", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: tl.name, color: tl.color, created_by_email: user?.email, created_by_name: user?.display_name, created_by_role: user?.role }) }).then(() => fetchLabels()).catch(() => {}); }
   async function deleteLabel(id: string) { if (!confirm("Delete this label?")) return; pausePoll(); setLabels(p => p.filter(l => l.id !== id)); fetch(`/api/labels/${id}?email=${encodeURIComponent(user?.email || "")}&role=${encodeURIComponent(user?.role || "user")}`, { method: "DELETE" }).then(r => { if (!r.ok) r.json().then(d => alert(d.error || "Cannot delete")); fetchLabels(); fetchConvos(); }).catch(() => {}); }
+  async function updateLabel() {
+    if (!editLabelId || !editLabelName.trim()) return;
+    pausePoll();
+    setLabels(p => p.map(l => l.id === editLabelId ? { ...l, name: editLabelName.trim(), color: editLabelColor } : l));
+    setEditLabelId(null); setLabelMenuId(null);
+    try {
+      const r = await fetch(`/api/labels/${editLabelId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: editLabelName.trim(), color: editLabelColor }) });
+      if (!r.ok) { const d = await r.json(); alert(d.error || "Cannot update"); }
+      fetchLabels(); fetchConvos();
+    } catch {}
+  }
   async function toggleLabel(convoId: string, labelId: string, has: boolean) { pausePoll(); const lb = labels.find(l => l.id === labelId); if (lb) { setConvos(p => p.map(c => { if (c.id !== convoId) return c; return { ...c, labels: has ? c.labels.filter(l => l.id !== labelId) : [...c.labels, lb] }; })); } setShowLabelMenu(null); fetch(`/api/conversations/${convoId}/labels`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ label_id: labelId, action: has ? "remove" : "add" }) }).catch(() => {}); }
   async function forwardMessage(msgId: string, targetIds: string[]) { if (!targetIds.length) return; await fetch(`/api/messages/${msgId}/forward`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ targetConversationIds: targetIds }) }); setForwardMsg(null); setForwardSelected(new Set()); fetchConvos(); }
   function saveContact(cid: string) { window.open(`/api/conversations/${cid}/save-contact`, "_blank"); }
   function downloadContactsCsv() { window.open("/api/contacts/export", "_blank"); }
   function addOptimisticMsg(tid: string, content: string, type: string = "text") { if (!selId) return; const m: Message = { id: tid, conversation_id: selId, role: "assistant", content, message_type: type as Message["message_type"], media_url: null, media_mime_type: null, media_filename: null, media_caption: null, media_sha256: null, reply_to_id: null, reaction: null, reaction_msg_id: null, latitude: null, longitude: null, location_name: null, location_address: null, whatsapp_msg_id: null, is_deleted: false, is_starred: false, status: "sent", created_at: new Date().toISOString() }; setMsgs(p => [...p, m]); setIsAtBottom(true); }
 
-  useEffect(() => { const h = (e: KeyboardEvent) => { if (e.key === "Escape") { setReplyTo(null); setChatMenuId(null); setMsgMenuId(null); setMsgMenuPos(null); setReactPickerId(null); setShowEmoji(false); setHeaderMenu(false); setImgPreview(null); setShowChatSearch(false); setChatLabelOpen(null); setShowLabelMenu(null); setForwardMsg(null); setForwardSelected(new Set()); setSidebarMenu(false); setShowLabelsModal(false); setShow2FA(false); setSlashActive(false); } }; document.addEventListener("keydown", h); return () => document.removeEventListener("keydown", h); }, []);
+  useEffect(() => { const h = (e: KeyboardEvent) => { if (e.key === "Escape") { setReplyTo(null); setChatMenuId(null); setMsgMenuId(null); setMsgMenuPos(null); setReactPickerId(null); setShowEmoji(false); setHeaderMenu(false); setImgPreview(null); setShowChatSearch(false); setChatLabelOpen(null); setShowLabelMenu(null); setForwardMsg(null); setForwardSelected(new Set()); setSidebarMenu(false); setShowLabelsModal(false); setShow2FA(false); setSlashActive(false); setLabelMenuId(null); setEditLabelId(null); } }; document.addEventListener("keydown", h); return () => document.removeEventListener("keydown", h); }, []);
 
   /* ═══ HELPERS ═══ */
   function ft(d: string) { const t = new Date(d), n = new Date(), df = n.getTime() - t.getTime(); if (df < 86400000 && t.getDate() === n.getDate()) return t.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); if (df < 172800000) return "Yesterday"; if (df < 604800000) return t.toLocaleDateString([], { weekday: "short" }); return t.toLocaleDateString([], { month: "short", day: "numeric" }); }
@@ -664,10 +679,21 @@ export default function Dashboard() {
                   <span className="material-symbols-rounded" style={{ fontSize: 14, color: "var(--primary)" }}>shield</span>
                   <p className="text-[10px] font-bold tracking-[0.08em] uppercase" style={{ color: "var(--text-4)" }}>Admin Labels</p>
                 </div>
-                {adminLabels.map(l => <div key={l.id} className="flex items-center gap-3 px-5 py-2.5 group/l tr" onMouseEnter={e => e.currentTarget.style.background = "var(--surface-3)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                  <span className="w-3.5 h-3.5 rounded-full flex-shrink-0 shadow-sm" style={{ background: l.color }}/>
-                  <span className="text-[13.5px] flex-1 font-medium" style={{ color: "var(--text-1)" }}>{l.name}</span>
-                  {canDelete(l) && <button onClick={() => deleteLabel(l.id)} className="opacity-0 group-hover/l:opacity-70 hover:!opacity-100 tr w-7 h-7 rounded-lg flex items-center justify-center" style={{ color: "var(--danger)", background: "var(--danger-muted)" }}><span className="material-symbols-rounded" style={{ fontSize: 15 }}>delete</span></button>}
+                {adminLabels.map(l => <div key={l.id} className="relative flex items-center gap-3 px-5 py-2.5 group/l tr" onMouseEnter={e => e.currentTarget.style.background = "var(--surface-3)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                  {editLabelId === l.id ? <>
+                    <button onClick={() => setEditLabelColor(LABEL_COLORS[(LABEL_COLORS.indexOf(editLabelColor) + 1) % LABEL_COLORS.length])} className="w-4 h-4 rounded-full flex-shrink-0 shadow-sm ring-2 ring-offset-1 tr" style={{ background: editLabelColor, ringColor: editLabelColor, ringOffsetColor: "var(--surface-1)" }}/>
+                    <input type="text" value={editLabelName} onChange={e => setEditLabelName(e.target.value)} onKeyDown={e => e.key === "Enter" && updateLabel()} className="flex-1 text-[13px] bg-transparent focus:outline-none font-medium" style={{ color: "var(--text-1)", borderBottom: "1.5px solid var(--primary)" }} autoFocus/>
+                    <button onClick={updateLabel} className="w-7 h-7 rounded-lg flex items-center justify-center tr" style={{ color: "var(--primary)" }}><span className="material-symbols-rounded" style={{ fontSize: 16 }}>check</span></button>
+                    <button onClick={() => setEditLabelId(null)} className="w-7 h-7 rounded-lg flex items-center justify-center tr" style={{ color: "var(--text-4)" }}><span className="material-symbols-rounded" style={{ fontSize: 16 }}>close</span></button>
+                  </> : <>
+                    <span className="w-3.5 h-3.5 rounded-full flex-shrink-0 shadow-sm" style={{ background: l.color }}/>
+                    <span className="text-[13.5px] flex-1 font-medium" style={{ color: "var(--text-1)" }}>{l.name}</span>
+                    {canDelete(l) && <button onClick={() => setLabelMenuId(labelMenuId === l.id ? null : l.id)} className="opacity-0 group-hover/l:opacity-70 hover:!opacity-100 tr w-7 h-7 rounded-lg flex items-center justify-center" style={{ color: "var(--text-3)" }}><span className="material-symbols-rounded" style={{ fontSize: 18 }}>more_vert</span></button>}
+                    {labelMenuId === l.id && <div className="absolute right-4 top-full z-[10] rounded-xl overflow-hidden anim-scale-in" style={{ background: "var(--surface-1)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)", minWidth: 140 }}>
+                      <button onClick={() => { setEditLabelId(l.id); setEditLabelName(l.name); setEditLabelColor(l.color); setLabelMenuId(null); }} className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-left tr hover:bg-[var(--surface-3)]"><span className="material-symbols-rounded" style={{ fontSize: 16, color: "var(--text-3)" }}>edit</span><span className="text-[13px] font-medium" style={{ color: "var(--text-1)" }}>Edit</span></button>
+                      <button onClick={() => { setLabelMenuId(null); deleteLabel(l.id); }} className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-left tr hover:bg-[var(--danger-muted)]"><span className="material-symbols-rounded" style={{ fontSize: 16, color: "var(--danger)" }}>delete</span><span className="text-[13px] font-medium" style={{ color: "var(--danger)" }}>Delete</span></button>
+                    </div>}
+                  </>}
                 </div>)}
               </>}
 
@@ -677,10 +703,21 @@ export default function Dashboard() {
                   <span className="material-symbols-rounded" style={{ fontSize: 14, color: "var(--text-3)" }}>person</span>
                   <p className="text-[10px] font-bold tracking-[0.08em] uppercase" style={{ color: "var(--text-4)" }}>{creator}</p>
                 </div>
-                {lbls.map(l => <div key={l.id} className="flex items-center gap-3 px-5 py-2.5 group/l tr" onMouseEnter={e => e.currentTarget.style.background = "var(--surface-3)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                  <span className="w-3.5 h-3.5 rounded-full flex-shrink-0 shadow-sm" style={{ background: l.color }}/>
-                  <span className="text-[13.5px] flex-1 font-medium" style={{ color: "var(--text-1)" }}>{l.name}</span>
-                  {canDelete(l) && <button onClick={() => deleteLabel(l.id)} className="opacity-0 group-hover/l:opacity-70 hover:!opacity-100 tr w-7 h-7 rounded-lg flex items-center justify-center" style={{ color: "var(--danger)", background: "var(--danger-muted)" }}><span className="material-symbols-rounded" style={{ fontSize: 15 }}>delete</span></button>}
+                {lbls.map(l => <div key={l.id} className="relative flex items-center gap-3 px-5 py-2.5 group/l tr" onMouseEnter={e => e.currentTarget.style.background = "var(--surface-3)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                  {editLabelId === l.id ? <>
+                    <button onClick={() => setEditLabelColor(LABEL_COLORS[(LABEL_COLORS.indexOf(editLabelColor) + 1) % LABEL_COLORS.length])} className="w-4 h-4 rounded-full flex-shrink-0 shadow-sm ring-2 ring-offset-1 tr" style={{ background: editLabelColor, ringColor: editLabelColor, ringOffsetColor: "var(--surface-1)" }}/>
+                    <input type="text" value={editLabelName} onChange={e => setEditLabelName(e.target.value)} onKeyDown={e => e.key === "Enter" && updateLabel()} className="flex-1 text-[13px] bg-transparent focus:outline-none font-medium" style={{ color: "var(--text-1)", borderBottom: "1.5px solid var(--primary)" }} autoFocus/>
+                    <button onClick={updateLabel} className="w-7 h-7 rounded-lg flex items-center justify-center tr" style={{ color: "var(--primary)" }}><span className="material-symbols-rounded" style={{ fontSize: 16 }}>check</span></button>
+                    <button onClick={() => setEditLabelId(null)} className="w-7 h-7 rounded-lg flex items-center justify-center tr" style={{ color: "var(--text-4)" }}><span className="material-symbols-rounded" style={{ fontSize: 16 }}>close</span></button>
+                  </> : <>
+                    <span className="w-3.5 h-3.5 rounded-full flex-shrink-0 shadow-sm" style={{ background: l.color }}/>
+                    <span className="text-[13.5px] flex-1 font-medium" style={{ color: "var(--text-1)" }}>{l.name}</span>
+                    {canDelete(l) && <button onClick={() => setLabelMenuId(labelMenuId === l.id ? null : l.id)} className="opacity-0 group-hover/l:opacity-70 hover:!opacity-100 tr w-7 h-7 rounded-lg flex items-center justify-center" style={{ color: "var(--text-3)" }}><span className="material-symbols-rounded" style={{ fontSize: 18 }}>more_vert</span></button>}
+                    {labelMenuId === l.id && <div className="absolute right-4 top-full z-[10] rounded-xl overflow-hidden anim-scale-in" style={{ background: "var(--surface-1)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)", minWidth: 140 }}>
+                      <button onClick={() => { setEditLabelId(l.id); setEditLabelName(l.name); setEditLabelColor(l.color); setLabelMenuId(null); }} className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-left tr hover:bg-[var(--surface-3)]"><span className="material-symbols-rounded" style={{ fontSize: 16, color: "var(--text-3)" }}>edit</span><span className="text-[13px] font-medium" style={{ color: "var(--text-1)" }}>Edit</span></button>
+                      <button onClick={() => { setLabelMenuId(null); deleteLabel(l.id); }} className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-left tr hover:bg-[var(--danger-muted)]"><span className="material-symbols-rounded" style={{ fontSize: 16, color: "var(--danger)" }}>delete</span><span className="text-[13px] font-medium" style={{ color: "var(--danger)" }}>Delete</span></button>
+                    </div>}
+                  </>}
                 </div>)}
               </div>)}
             </div>
