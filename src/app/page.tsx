@@ -274,7 +274,7 @@ export default function Dashboard() {
   /* ═══ CONTEXT MENU ═══ */
   function ChatCtx({ convo, onClose }: { convo: ConversationWithLastMessage; onClose: () => void }) {
     const lo = chatLabelOpen === convo.id;
-    return <div className={s.menuWrap} style={{ background: "var(--surface-2)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)", backdropFilter: "blur(16px)", position: "absolute", right: 0, top: "100%", marginTop: 4, zIndex: 100 }} onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()}>
+    return <div className="rounded-2xl py-1 min-w-[200px] anim-menu overflow-hidden" style={{ background: "var(--surface-2)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)", backdropFilter: "blur(16px)", position: "absolute", right: 0, top: "100%", marginTop: 4, zIndex: 100 }} onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()}>
       <MI i="push_pin" l={convo.is_pinned ? "Unpin" : "Pin"} o={() => { act(`/api/conversations/${convo.id}/pin`, { pinned: !convo.is_pinned }); onClose(); }}/>
       <MI i={convo.is_muted ? "notifications_active" : "notifications_off"} l={convo.is_muted ? "Unmute" : "Mute"} o={() => { act(`/api/conversations/${convo.id}/mute`, { muted: !convo.is_muted }); onClose(); }}/>
       <MI i="mark_email_unread" l="Mark unread" o={() => { act(`/api/conversations/${convo.id}/unread`, { unread_count: 1 }); onClose(); }}/>
@@ -378,7 +378,7 @@ export default function Dashboard() {
               <button onClick={() => setShowSearch(!showSearch)} className={s.iconBtn} style={{ color: "var(--text-3)" }}><span className="material-symbols-rounded" style={{ fontSize: 20 }}>search</span></button>
               <div className="relative">
                 <button onClick={e => { e.stopPropagation(); setSidebarMenu(!sidebarMenu); }} className={s.iconBtn} style={{ color: "var(--text-3)" }}><span className="material-symbols-rounded" style={{ fontSize: 20 }}>more_vert</span></button>
-                {sidebarMenu && <div className={s.menuWrap} style={{ background: "var(--surface-2)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)", backdropFilter: "blur(20px)", position: "absolute", right: 0, top: "100%", marginTop: 4, zIndex: 100, minWidth: 220 }} onClick={e => e.stopPropagation()}>
+                {sidebarMenu && <div className="anim-menu" style={{ background: "var(--surface-2)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)", backdropFilter: "blur(20px)", position: "absolute", right: 0, top: "100%", marginTop: 4, zIndex: 100, minWidth: 220, borderRadius: 16, overflow: "hidden" }} onClick={e => e.stopPropagation()}>
                   {/* Theme Section */}
                   <div className="px-4 pt-2.5 pb-1"><p className="text-[10px] font-bold tracking-[0.08em] uppercase" style={{ color: "var(--text-4)" }}>Theme</p></div>
                   <div className="px-3 pb-1.5 flex gap-1">
@@ -477,7 +477,7 @@ export default function Dashboard() {
               <button onClick={() => { setShowChatSearch(!showChatSearch); setChatSearch(""); }} className={s.iconBtn} style={{ color: "var(--text-3)" }}><span className="material-symbols-rounded" style={{ fontSize: 20 }}>search</span></button>
               <div className="relative">
                 <button onClick={e => { e.stopPropagation(); setHeaderMenu(!headerMenu); setChatMenuId(null); setMsgMenuId(null); }} className={s.iconBtn} style={{ color: "var(--text-3)" }}><span className="material-symbols-rounded" style={{ fontSize: 20 }}>more_vert</span></button>
-                {headerMenu && <div className={s.menuWrap} style={{ background: "var(--surface-2)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)", backdropFilter: "blur(16px)", position: "absolute", right: 0, top: "100%", marginTop: 4, zIndex: 100 }} onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()}>
+                {headerMenu && <div className="anim-menu" style={{ background: "var(--surface-2)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)", backdropFilter: "blur(16px)", position: "absolute", right: 0, top: "100%", marginTop: 4, zIndex: 100, borderRadius: 16, overflow: "hidden" }} onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()}>
                   <MI i="push_pin" l={sel.is_pinned ? "Unpin" : "Pin"} o={() => act(`/api/conversations/${sel.id}/pin`, { pinned: !sel.is_pinned })}/>
                   <MI i={sel.is_muted ? "notifications_active" : "notifications_off"} l={sel.is_muted ? "Unmute" : "Mute"} o={() => act(`/api/conversations/${sel.id}/mute`, { muted: !sel.is_muted })}/>
                   <MI i="mark_email_unread" l="Mark unread" o={() => act(`/api/conversations/${sel.id}/unread`, { unread_count: 1 })}/>
@@ -645,8 +645,8 @@ export default function Dashboard() {
           if (l.created_by_email === user?.email) return true; // own label
           return false;
         };
-        return <div className="fixed inset-0 z-[200] flex items-center justify-center" style={{ background: "var(--bg-overlay)", backdropFilter: "blur(8px)" }} onClick={() => setShowLabelsModal(false)}>
-          <div className="rounded-2xl w-[420px] max-h-[560px] overflow-hidden anim-scale-in" style={{ background: "var(--surface-1)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)" }} onClick={e => e.stopPropagation()}>
+        return <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 anim-overlay" style={{ background: "var(--bg-overlay)", backdropFilter: "blur(8px)" }} onClick={() => { setShowLabelsModal(false); setLabelMenuId(null); setEditLabelId(null); }}>
+          <div className="rounded-2xl w-full max-w-[420px] max-h-[560px] overflow-hidden anim-modal" style={{ background: "var(--surface-1)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)" }} onClick={e => e.stopPropagation()}>
 
             {/* Header */}
             <div className="px-5 py-4 flex items-center justify-between" style={{ borderBottom: "1px solid var(--border)" }}>
@@ -689,7 +689,7 @@ export default function Dashboard() {
                     <span className="w-3.5 h-3.5 rounded-full flex-shrink-0 shadow-sm" style={{ background: l.color }}/>
                     <span className="text-[13.5px] flex-1 font-medium" style={{ color: "var(--text-1)" }}>{l.name}</span>
                     {canDelete(l) && <button onClick={() => setLabelMenuId(labelMenuId === l.id ? null : l.id)} className="opacity-0 group-hover/l:opacity-70 hover:!opacity-100 tr w-7 h-7 rounded-lg flex items-center justify-center" style={{ color: "var(--text-3)" }}><span className="material-symbols-rounded" style={{ fontSize: 18 }}>more_vert</span></button>}
-                    {labelMenuId === l.id && <div className="absolute right-4 top-full z-[10] rounded-xl overflow-hidden anim-scale-in" style={{ background: "var(--surface-1)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)", minWidth: 140 }}>
+                    {labelMenuId === l.id && <><div className="fixed inset-0 z-[9]" onClick={() => setLabelMenuId(null)}/><div className="absolute right-4 top-full z-[10] rounded-xl overflow-hidden anim-menu" style={{ background: "var(--surface-1)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)", minWidth: 140 }}>
                       <button onClick={() => { setEditLabelId(l.id); setEditLabelName(l.name); setEditLabelColor(l.color); setLabelMenuId(null); }} className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-left tr hover:bg-[var(--surface-3)]"><span className="material-symbols-rounded" style={{ fontSize: 16, color: "var(--text-3)" }}>edit</span><span className="text-[13px] font-medium" style={{ color: "var(--text-1)" }}>Edit</span></button>
                       <button onClick={() => { setLabelMenuId(null); deleteLabel(l.id); }} className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-left tr hover:bg-[var(--danger-muted)]"><span className="material-symbols-rounded" style={{ fontSize: 16, color: "var(--danger)" }}>delete</span><span className="text-[13px] font-medium" style={{ color: "var(--danger)" }}>Delete</span></button>
                     </div>}
@@ -713,7 +713,7 @@ export default function Dashboard() {
                     <span className="w-3.5 h-3.5 rounded-full flex-shrink-0 shadow-sm" style={{ background: l.color }}/>
                     <span className="text-[13.5px] flex-1 font-medium" style={{ color: "var(--text-1)" }}>{l.name}</span>
                     {canDelete(l) && <button onClick={() => setLabelMenuId(labelMenuId === l.id ? null : l.id)} className="opacity-0 group-hover/l:opacity-70 hover:!opacity-100 tr w-7 h-7 rounded-lg flex items-center justify-center" style={{ color: "var(--text-3)" }}><span className="material-symbols-rounded" style={{ fontSize: 18 }}>more_vert</span></button>}
-                    {labelMenuId === l.id && <div className="absolute right-4 top-full z-[10] rounded-xl overflow-hidden anim-scale-in" style={{ background: "var(--surface-1)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)", minWidth: 140 }}>
+                    {labelMenuId === l.id && <><div className="fixed inset-0 z-[9]" onClick={() => setLabelMenuId(null)}/><div className="absolute right-4 top-full z-[10] rounded-xl overflow-hidden anim-menu" style={{ background: "var(--surface-1)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)", minWidth: 140 }}>
                       <button onClick={() => { setEditLabelId(l.id); setEditLabelName(l.name); setEditLabelColor(l.color); setLabelMenuId(null); }} className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-left tr hover:bg-[var(--surface-3)]"><span className="material-symbols-rounded" style={{ fontSize: 16, color: "var(--text-3)" }}>edit</span><span className="text-[13px] font-medium" style={{ color: "var(--text-1)" }}>Edit</span></button>
                       <button onClick={() => { setLabelMenuId(null); deleteLabel(l.id); }} className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-left tr hover:bg-[var(--danger-muted)]"><span className="material-symbols-rounded" style={{ fontSize: 16, color: "var(--danger)" }}>delete</span><span className="text-[13px] font-medium" style={{ color: "var(--danger)" }}>Delete</span></button>
                     </div>}
@@ -815,7 +815,7 @@ export default function Dashboard() {
         </div>
       </div>}
 
-      {(chatMenuId || msgMenuId || headerMenu || reactPickerId || sidebarMenu) && <div className="fixed inset-0 z-[90]" onClick={() => { setChatMenuId(null); setMsgMenuId(null); setMsgMenuPos(null); setHeaderMenu(false); setReactPickerId(null); setShowLabelMenu(null); setChatLabelOpen(null); setShowQuickReplies(false); setSidebarMenu(false); }}/>}
+      {(chatMenuId || msgMenuId || headerMenu || reactPickerId || sidebarMenu || labelMenuId) && <div className="fixed inset-0 z-[90]" onClick={() => { setChatMenuId(null); setMsgMenuId(null); setMsgMenuPos(null); setHeaderMenu(false); setReactPickerId(null); setShowLabelMenu(null); setChatLabelOpen(null); setSidebarMenu(false); setLabelMenuId(null); }}/>}
     </div>
   );
 }
