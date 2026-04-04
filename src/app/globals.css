@@ -162,3 +162,11 @@ audio::-webkit-media-controls-panel { background: var(--surface-2); border-radiu
 
 /* Placeholder */
 input::placeholder, textarea::placeholder { color: var(--text-4); }
+
+/* Mobile fixes */
+html, body { overscroll-behavior: none; -webkit-overflow-scrolling: touch; }
+body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+@media (max-width: 767px) {
+  * { -webkit-tap-highlight-color: transparent; }
+  input, textarea, select { font-size: 16px !important; /* prevent iOS zoom on focus */ }
+}

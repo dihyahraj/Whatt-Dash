@@ -1,0 +1,22 @@
+{
+  "name": "Whatt Dash",
+  "short_name": "Whatt Dash",
+  "description": "WhatsApp Business Dashboard",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0c1015",
+  "theme_color": "#059669",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "https://cdn.shopify.com/s/files/1/0904/3168/4923/files/Bio_Shoo_Favicon.png?v=1767101139",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://cdn.shopify.com/s/files/1/0904/3168/4923/files/Bio_Shoo_Favicon.png?v=1767101139",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}

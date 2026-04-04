@@ -57,6 +57,8 @@ export default function Dashboard() {
   }, [theme]);
 
   const sbRT = useMemo(() => { const u = process.env.NEXT_PUBLIC_SUPABASE_URL, k = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY; if (!u || !k) return null; return createClient(u, k); }, []);
+  const [isMobile, setIsMobile] = useState(false);
+  useEffect(() => { const check = () => setIsMobile(window.innerWidth < 768); check(); window.addEventListener("resize", check); return () => window.removeEventListener("resize", check); }, []);
 
   /* ═══ STATE ═══ */
   const [convos, setConvos] = useState<ConversationWithLastMessage[]>([]);
@@ -176,6 +178,16 @@ export default function Dashboard() {
   }, [selId, fetchConvos, sbRT]);
 
   useEffect(() => { if ("Notification" in window && Notification.permission === "default") Notification.requestPermission(); }, []);
+
+  // PWA back button — go to sidebar instead of exiting app
+  useEffect(() => {
+    if (selId) { window.history.pushState({ chat: selId }, ""); }
+    const onBack = (e: PopStateEvent) => {
+      if (selId) { e.preventDefault(); setSelId(null); setMsgs([]); setSidebarOpen(true); }
+    };
+    window.addEventListener("popstate", onBack);
+    return () => window.removeEventListener("popstate", onBack);
+  }, [selId]);
   useEffect(() => { const t = convos.reduce((s, c) => s + (c.unread_count || 0), 0); document.title = t > 0 ? `(${t}) Whatt Dash` : "Whatt Dash"; }, [convos]);
 
   /* ═══ SEND ═══ */
@@ -329,7 +341,7 @@ export default function Dashboard() {
      RENDER
      ═══════════════════════════════════════════════════════════════ */
   return (
-    <div className="flex h-screen overflow-hidden select-none" style={{ background: "var(--bg)" }}>
+    <div className="flex overflow-hidden select-none" style={{ background: "var(--bg)", height: "100dvh", touchAction: "manipulation" }}>
 
       {/* ▓▓▓▓ SIDEBAR ▓▓▓▓ */}
       <div className={`${selId && !sidebarOpen ? "hidden md:flex" : "flex"} w-full md:w-[380px] flex-col flex-shrink-0 tr`} style={{ background: "var(--sidebar-bg)", borderRight: "1px solid var(--border)" }}>
@@ -441,7 +453,7 @@ export default function Dashboard() {
           {/* ── Chat Header ── */}
           <div className="px-4 py-3 flex items-center justify-between" style={{ background: "var(--bg-raised)", borderBottom: "1px solid var(--border)" }}>
             <div className="flex items-center gap-3">
-              <button onClick={() => { setSelId(null); setSidebarOpen(true); }} className="md:hidden w-9 h-9 rounded-xl flex items-center justify-center" style={{ color: "var(--text-1)" }}><span className="material-symbols-rounded" style={{ fontSize: 22 }}>arrow_back</span></button>
+              <button onClick={() => { setSelId(null); setSidebarOpen(true); if (window.history.state?.chat) window.history.back(); }} className="md:hidden w-10 h-10 rounded-xl flex items-center justify-center -ml-1" style={{ color: "var(--text-1)" }}><span className="material-symbols-rounded" style={{ fontSize: 24 }}>arrow_back</span></button>
               <div className={`w-10 h-10 rounded-[14px] bg-gradient-to-br ${aclr(sel.id)} flex items-center justify-center text-white text-sm font-bold shadow-sm`}>{ini(sel.name, sel.phone)}</div>
               <div><h2 className="text-[15px] font-bold tracking-tight" style={{ color: "var(--text-1)" }}>{sel.name || sel.phone}</h2><p className="text-[11px] font-mono" style={{ color: "var(--text-4)" }}>{sel.phone}</p></div>
             </div>
@@ -466,14 +478,14 @@ export default function Dashboard() {
           {showChatSearch && <div className="px-4 py-2.5 flex items-center gap-2 anim-fade-up" style={{ background: "var(--bg-raised)", borderBottom: "1px solid var(--border)" }}><span className="material-symbols-rounded" style={{ fontSize: 18, color: "var(--text-4)" }}>search</span><input type="text" value={chatSearch} onChange={e => setChatSearch(e.target.value)} placeholder="Search in chat..." className="flex-1 bg-transparent text-[13px] focus:outline-none" style={{ color: "var(--text-1)" }} autoFocus/><button onClick={() => { setShowChatSearch(false); setChatSearch(""); }} style={{ color: "var(--text-4)" }}>✕</button></div>}
 
           {/* ── Messages ── */}
-          <div ref={chatBoxRef} onScroll={handleScroll} className="flex-1 overflow-y-auto px-4 sm:px-12 lg:px-20 py-4" style={{ background: "var(--chat-bg)" }}>
+          <div ref={chatBoxRef} onScroll={handleScroll} className="flex-1 overflow-y-auto px-2.5 sm:px-12 lg:px-20 py-3 sm:py-4" style={{ background: "var(--chat-bg)" }}>
             {displayMsgs.map((msg, i) => {
               const isMe = msg.role === "assistant";
               const replied = msg.reply_to_id ? msgs.find(m => m.id === msg.reply_to_id) : null;
               return <div key={msg.id}>
                 {sd(displayMsgs, i) && <div className="flex justify-center my-4"><span className="px-4 py-1.5 rounded-full text-[11px] font-semibold" style={{ background: "var(--surface-1)", color: "var(--text-3)", boxShadow: "var(--shadow-sm)" }}>{dl(msg.created_at)}</span></div>}
                 <div className={`flex ${isMe ? "justify-end" : "justify-start"} ${msg.reaction ? "mb-5" : "mb-[3px]"} group/m`}>
-                  <div className="relative max-w-[70%] sm:max-w-[60%]">
+                  <div className="relative max-w-[85%] sm:max-w-[65%]">
                     {replied && <div className="px-3 py-2 rounded-t-2xl text-[11px]" style={{ background: isMe ? "var(--bubble-me)" : "var(--bubble-them)", borderLeft: "3px solid var(--primary)", opacity: 0.85 }}><p className="font-bold text-[10px]" style={{ color: "var(--primary)" }}>{replied.role === "user" ? (sel?.name || sel?.phone) : "You"}</p><p className="truncate" style={{ color: "var(--text-3)" }}>{replied.content}</p></div>}
                     <div className={`relative px-3 py-[7px] ${msg.message_type === "sticker" ? "" : replied ? "rounded-b-2xl" : "rounded-2xl"}`} style={msg.message_type === "sticker" ? {} : { background: isMe ? "var(--bubble-me)" : "var(--bubble-them)", color: isMe ? "var(--bubble-me-text)" : "var(--bubble-them-text)", boxShadow: "var(--shadow-sm)", ...(isMe && !replied ? { borderTopRightRadius: "6px" } : !isMe && !replied ? { borderTopLeftRadius: "6px" } : {}) }}>
                       {!msg.is_deleted && <div className="absolute right-0 top-0 opacity-0 group-hover/m:opacity-100 z-10"><button onClick={e => { e.stopPropagation(); const rect = e.currentTarget.getBoundingClientRect(); setMsgMenuPos(msgMenuId === msg.id ? null : { x: isMe ? rect.right : rect.left, y: rect.bottom + 4, isMe }); setMsgMenuId(msgMenuId === msg.id ? null : msg.id); setChatMenuId(null); setHeaderMenu(false); }} className="w-7 h-7 rounded-bl-xl flex items-center justify-center" style={{ background: isMe ? "var(--bubble-me)" : "var(--bubble-them)" }}><span className="material-symbols-rounded" style={{ fontSize: 16, color: "var(--text-3)" }}>expand_more</span></button></div>}
@@ -493,10 +505,10 @@ export default function Dashboard() {
           {!isAtBottom && <div className="relative"><button onClick={scrollToBottom} className="absolute right-6 -top-14 w-10 h-10 rounded-full flex items-center justify-center z-20 tr" style={{ background: "var(--surface-1)", boxShadow: "var(--shadow-lg)", border: "1px solid var(--border)" }}>{hasNewMsg && <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center" style={{ background: "var(--unread-badge)", color: "var(--unread-badge-text)" }}>!</span>}<span className="material-symbols-rounded" style={{ fontSize: 18, color: "var(--text-1)" }}>expand_more</span></button></div>}
 
           {/* Reply */}
-          {replyTo && <div className="px-4 sm:px-10 lg:px-16 pt-2" style={{ background: "var(--bg-raised)" }}><div className="flex items-center gap-3 rounded-xl px-3 py-2" style={{ background: "var(--surface-3)", borderLeft: "3px solid var(--primary)" }}><div className="flex-1 min-w-0"><p className="text-[11px] font-bold" style={{ color: "var(--primary)" }}>{replyTo.role === "user" ? (sel?.name || sel?.phone) : "You"}</p><p className="text-[12px] truncate" style={{ color: "var(--text-3)" }}>{replyTo.content}</p></div><button onClick={() => setReplyTo(null)} style={{ color: "var(--text-4)" }}>✕</button></div></div>}
+          {replyTo && <div className="px-3 sm:px-10 lg:px-16 pt-2" style={{ background: "var(--bg-raised)" }}><div className="flex items-center gap-3 rounded-xl px-3 py-2" style={{ background: "var(--surface-3)", borderLeft: "3px solid var(--primary)" }}><div className="flex-1 min-w-0"><p className="text-[11px] font-bold" style={{ color: "var(--primary)" }}>{replyTo.role === "user" ? (sel?.name || sel?.phone) : "You"}</p><p className="text-[12px] truncate" style={{ color: "var(--text-3)" }}>{replyTo.content}</p></div><button onClick={() => setReplyTo(null)} style={{ color: "var(--text-4)" }}>✕</button></div></div>}
 
           {/* ── Input Area ── */}
-          <div className="relative" style={{ background: "var(--bg-raised)", borderTop: "1px solid var(--border)" }}>
+          <div className="relative" style={{ background: "var(--bg-raised)", borderTop: "1px solid var(--border)", paddingBottom: "env(safe-area-inset-bottom, 0px)" }}>
 
             {/* ▓▓ Emoji Popup ▓▓ */}
             {(showEmoji || emojiClosing) && <>
@@ -585,7 +597,7 @@ export default function Dashboard() {
                     else if (e.key === "Escape") { setSlashActive(false); }
                     return;
                   }
-                  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
+                  if (e.key === "Enter" && !e.shiftKey && !isMobile) { e.preventDefault(); handleSend(); }
                 }} placeholder="Type or / for quick replies" rows={1} className="w-full bg-transparent text-[14px] focus:outline-none resize-none leading-[1.5] max-h-[120px] overflow-y-auto" style={{ color: "var(--text-1)", height: "auto", transition: "height 0.15s ease" }}/>
               </div>
               <button onClick={handleSend} disabled={sending || !input.trim()} className="w-10 h-10 rounded-xl disabled:opacity-20 tr flex items-center justify-center flex-shrink-0 shadow-sm hover:shadow-md" style={{ background: "var(--primary)" }}>
