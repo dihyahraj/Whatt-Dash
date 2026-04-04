@@ -37,7 +37,13 @@ export async function POST(
       contentType: file.type || "application/octet-stream", cacheControl: "31536000", upsert: false,
     });
     if (uploadErr) return Response.json({ error: "Storage upload failed: " + uploadErr.message }, { status: 500 });
-    const publicUrl = sb.storage.from("whatsapp-media").getPublicUrl(storagePath).data.publicUrl;
+    const rawPublicUrl = sb.storage.from("whatsapp-media").getPublicUrl(storagePath).data.publicUrl;
+    // Fix: replace internal Docker URL with public URL for browser access
+    const publicSupabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
+    const internalUrl = process.env.SUPABASE_INTERNAL_URL || "";
+    const publicUrl = internalUrl && rawPublicUrl.includes(internalUrl) 
+      ? rawPublicUrl.replace(internalUrl, publicSupabaseUrl)
+      : rawPublicUrl;
 
     // 2. Determine WhatsApp message type
     // Detect MIME from extension if file.type is empty (mobile browsers)
