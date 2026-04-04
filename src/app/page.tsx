@@ -135,8 +135,17 @@ export default function Dashboard() {
   async function createQuickReply() { if (!qrTitle.trim() || !qrContent.trim()) return; try { const r = await fetch("/api/quick-replies", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: qrTitle, content: qrContent, category: qrCategory || null }) }); if (r.ok) { fetchQuickReplies(); setQrTitle(""); setQrContent(""); setQrCategory(""); setQrMode("list"); } } catch {} }
   async function updateQuickReply() { if (!qrEditId || !qrTitle.trim() || !qrContent.trim()) return; try { const r = await fetch(`/api/quick-replies/${qrEditId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: qrTitle, content: qrContent, category: qrCategory || null }) }); if (r.ok) { fetchQuickReplies(); setQrTitle(""); setQrContent(""); setQrCategory(""); setQrEditId(null); setQrMode("list"); } } catch {} }
   async function deleteQuickReply(id: string) { if (!confirm("Delete this quick reply?")) return; try { await fetch(`/api/quick-replies/${id}`, { method: "DELETE" }); fetchQuickReplies(); } catch {} }
-  function useQuickReply(qr: QuickReply) { let t = qr.content; if (sel) { t = t.replace(/\{name\}/g, sel.name || sel.phone).replace(/\{phone\}/g, sel.phone); } setInput(t); closeQR(); setTimeout(() => { if (inputRef.current) { inputRef.current.style.height = "auto"; inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 120) + "px"; inputRef.current.focus(); } }, 50); fetch(`/api/quick-replies/${qr.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ use: true }) }).catch(() => {}); }
-  function selectSlashQR(qr: QuickReply) { let t = qr.content; if (sel) { t = t.replace(/\{name\}/g, sel.name || sel.phone).replace(/\{phone\}/g, sel.phone); } setInput(t); setSlashActive(false); setSlashQuery(""); setTimeout(() => { if (inputRef.current) { inputRef.current.style.height = "auto"; inputRef.current.style.height = Math.min(inputRef.current.scrollHeight, 120) + "px"; inputRef.current.focus(); } }, 50); fetch(`/api/quick-replies/${qr.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ use: true }) }).catch(() => {}); }
+  function useQuickReply(qr: QuickReply) { let t = qr.content; if (sel) { t = t.replace(/\{name\}/g, sel.name || sel.phone).replace(/\{phone\}/g, sel.phone); } setInput(t); closeQR(); setTimeout(() => smoothResizeInput(), 50); fetch(`/api/quick-replies/${qr.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ use: true }) }).catch(() => {}); }
+  function selectSlashQR(qr: QuickReply) { let t = qr.content; if (sel) { t = t.replace(/\{name\}/g, sel.name || sel.phone).replace(/\{phone\}/g, sel.phone); } setInput(t); setSlashActive(false); setSlashQuery(""); setTimeout(() => smoothResizeInput(), 50); fetch(`/api/quick-replies/${qr.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ use: true }) }).catch(() => {}); }
+  function smoothResizeInput() {
+    const el = inputRef.current; if (!el) return;
+    const from = el.offsetHeight;
+    el.style.transition = "none"; el.style.height = "auto";
+    const to = Math.min(el.scrollHeight, 120);
+    el.style.height = from + "px"; el.offsetHeight; // force reflow
+    el.style.transition = "height 0.2s cubic-bezier(0.16, 1, 0.3, 1)";
+    el.style.height = to + "px"; el.focus();
+  }
 
   /* ═══ EFFECTS (unchanged logic) ═══ */
   useEffect(() => { fetchConvos(); fetchArchived(); fetchLabels(); fetchQuickReplies(); }, [fetchConvos, fetchArchived, fetchLabels, fetchQuickReplies]);
