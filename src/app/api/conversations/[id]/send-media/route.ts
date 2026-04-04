@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { supabase, getSupabase } from "@/lib/supabase";
 
-const GRAPH_API = "https://graph.facebook.com/v25.0";
+const GRAPH_API = "https://graph.facebook.com/v20.0";
 
 export async function POST(
   request: NextRequest,
@@ -76,13 +76,14 @@ export async function POST(
     console.log(`[SEND-MEDIA] waType: ${waType}, forceType: ${forceType}`);
 
     // 3. Upload file to WhatsApp Media API → get media_id
-    // Use original file.type for Meta (they validate against actual content)
     const uploadMime = file.type || mimeType;
-    console.log(`[SEND-MEDIA] Uploading to WhatsApp Media API... uploadMime: ${uploadMime}, detected: ${mimeType}, original: ${file.type}, size: ${file.size}`);
+    console.log(`[SEND-MEDIA] Uploading to WhatsApp Media API... uploadMime: ${uploadMime}, fileType: ${file.type}, detected: ${mimeType}, size: ${file.size}, name: ${file.name}`);
     
+    // Create a proper File object for Meta API
+    const metaFile = new File([buffer], file.name, { type: uploadMime });
     const uploadForm = new FormData();
     uploadForm.append("messaging_product", "whatsapp");
-    uploadForm.append("file", new Blob([buffer], { type: uploadMime }), file.name);
+    uploadForm.append("file", metaFile);
     uploadForm.append("type", uploadMime);
 
     const uploadRes = await fetch(`${GRAPH_API}/${phoneId}/media`, {
