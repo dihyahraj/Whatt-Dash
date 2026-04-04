@@ -871,38 +871,43 @@ export default function Dashboard() {
         </div>;
       })()}
 
-      {/* ▓▓ Paste File Preview ▓▓ */}
-      {pasteFile && <div className="fixed inset-0 z-[250] flex flex-col" style={{ background: "var(--bg)" }}>
-        {/* Header */}
-        <div className="flex items-center gap-3 px-4 sm:px-6 py-3" style={{ background: "var(--surface-1)", borderBottom: "1px solid var(--border)" }}>
-          <button onClick={cancelPaste} className="w-10 h-10 rounded-xl flex items-center justify-center tr hover:bg-[var(--surface-3)]" style={{ color: "var(--text-1)" }}><span className="material-symbols-rounded" style={{ fontSize: 22 }}>close</span></button>
-          <div className="flex-1 min-w-0">
-            <p className="text-[14px] font-bold truncate" style={{ color: "var(--text-1)" }}>{pasteFile.name}</p>
-            <p className="text-[11px]" style={{ color: "var(--text-3)" }}>{(pasteFile.size / 1024).toFixed(1)} KB · {pasteFile.type || "file"}</p>
-          </div>
-        </div>
+      {/* ▓▓ Paste File Preview — Inline overlay on chat ▓▓ */}
+      {pasteFile && <div className="fixed inset-0 z-[250] flex items-center justify-center p-3 sm:p-6" style={{ background: "rgba(0,0,0,0.75)", backdropFilter: "blur(8px)" }} onClick={cancelPaste}>
+        <div className="w-full max-w-[520px] rounded-2xl overflow-hidden anim-scale-in flex flex-col" style={{ background: "var(--surface-1)", boxShadow: "0 24px 80px rgba(0,0,0,0.5)", border: "1px solid var(--border)", maxHeight: "85vh" }} onClick={e => e.stopPropagation()}>
 
-        {/* Preview Area */}
-        <div className="flex-1 flex items-center justify-center p-4 sm:p-8 overflow-auto" style={{ background: "var(--chat-bg)" }}>
-          {pastePreview ? (
-            <img src={pastePreview} alt="Preview" className="max-w-full max-h-full object-contain rounded-2xl" style={{ boxShadow: "var(--shadow-xl)" }}/>
-          ) : (
-            <div className="flex flex-col items-center gap-4 px-8 py-12 rounded-2xl" style={{ background: "var(--surface-1)", border: "1px solid var(--border)" }}>
-              <span className="material-symbols-rounded" style={{ fontSize: 48, color: "var(--text-4)" }}>description</span>
-              <p className="text-[15px] font-bold" style={{ color: "var(--text-1)" }}>{pasteFile.name}</p>
-              <p className="text-[12px]" style={{ color: "var(--text-3)" }}>{(pasteFile.size / 1024).toFixed(1)} KB</p>
+          {/* Header */}
+          <div className="flex items-center gap-3 px-4 py-3 flex-shrink-0" style={{ borderBottom: "1px solid var(--border)" }}>
+            <button onClick={cancelPaste} className="w-9 h-9 rounded-xl flex items-center justify-center tr hover:bg-[var(--surface-3)]" style={{ color: "var(--text-3)" }}><span className="material-symbols-rounded" style={{ fontSize: 20 }}>close</span></button>
+            <div className="flex-1 min-w-0">
+              <p className="text-[13px] font-bold truncate" style={{ color: "var(--text-1)" }}>
+                {pasteFile.type.startsWith("image/") ? "Send Image" : "Send File"}
+              </p>
             </div>
-          )}
-        </div>
-
-        {/* Bottom — Caption + Send */}
-        <div className="px-4 sm:px-6 py-3 flex items-end gap-3" style={{ background: "var(--surface-1)", borderTop: "1px solid var(--border)", paddingBottom: "max(12px, env(safe-area-inset-bottom))" }}>
-          <div className="flex-1 rounded-2xl px-4 py-2.5" style={{ background: "var(--surface-3)", border: "1.5px solid var(--border)" }}>
-            <input type="text" value={pasteCaption} onChange={e => setPasteCaption(e.target.value)} onKeyDown={e => { if (e.key === "Enter") sendPasteFile(); }} placeholder="Add a caption..." autoFocus className="w-full bg-transparent text-[14px] focus:outline-none" style={{ color: "var(--text-1)" }}/>
+            <span className="text-[11px] px-2.5 py-1 rounded-lg font-medium" style={{ background: "var(--surface-3)", color: "var(--text-3)" }}>{(pasteFile.size / 1024).toFixed(0)} KB</span>
           </div>
-          <button onClick={sendPasteFile} className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg tr hover:shadow-xl" style={{ background: "var(--primary)" }}>
-            <span className="material-symbols-rounded" style={{ fontSize: 22, color: "var(--primary-text)", fontVariationSettings: "'FILL' 1" }}>send</span>
-          </button>
+
+          {/* Preview */}
+          <div className="flex-1 flex items-center justify-center p-4 overflow-auto min-h-0" style={{ background: "var(--surface-3)" }}>
+            {pastePreview ? (
+              <img src={pastePreview} alt="Preview" className="max-w-full max-h-[50vh] object-contain rounded-xl" style={{ boxShadow: "0 8px 32px rgba(0,0,0,0.3)" }}/>
+            ) : (
+              <div className="flex flex-col items-center gap-3 py-8">
+                <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background: "var(--surface-1)" }}><span className="material-symbols-rounded" style={{ fontSize: 32, color: "var(--text-4)" }}>description</span></div>
+                <p className="text-[13px] font-bold" style={{ color: "var(--text-1)" }}>{pasteFile.name}</p>
+                <p className="text-[11px]" style={{ color: "var(--text-4)" }}>{pasteFile.type || "Unknown type"}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Caption + Send */}
+          <div className="flex items-center gap-2 px-3 py-3 flex-shrink-0" style={{ borderTop: "1px solid var(--border)" }}>
+            <div className="flex-1 rounded-xl px-3.5 py-2.5" style={{ background: "var(--surface-3)", border: "1.5px solid var(--border)" }}>
+              <input type="text" value={pasteCaption} onChange={e => setPasteCaption(e.target.value)} onKeyDown={e => { if (e.key === "Enter") sendPasteFile(); if (e.key === "Escape") cancelPaste(); }} placeholder="Add a caption..." autoFocus className="w-full bg-transparent text-[13px] focus:outline-none" style={{ color: "var(--text-1)" }}/>
+            </div>
+            <button onClick={sendPasteFile} className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 tr hover:shadow-lg" style={{ background: "var(--primary)" }}>
+              <span className="material-symbols-rounded" style={{ fontSize: 20, color: "var(--primary-text)", fontVariationSettings: "'FILL' 1" }}>send</span>
+            </button>
+          </div>
         </div>
       </div>}
 
