@@ -161,10 +161,11 @@ export default function Dashboard() {
     if (!pasteFile || !selId) return;
     const f = pasteFile;
     const caption = pasteCaption; // Save before clearing state
-    const ic = f.type.startsWith("image/") ? "📷" : f.type.startsWith("video/") ? "🎥" : "📄";
+    const ic = f.type.startsWith("image/") ? "📷" : f.type.startsWith("video/") ? "🎥" : f.type.startsWith("audio/") ? "🎵" : "📄";
     const tid = `temp_paste_${Date.now()}`;
+    const msgType = f.type.startsWith("image/") ? "image" : f.type.startsWith("video/") ? "video" : f.type.startsWith("audio/") ? "audio" : "document";
     const optContent = caption ? `${ic} ${caption}` : `${ic} Sending ${f.name}...`;
-    const om: Message = { id: tid, conversation_id: selId, role: "assistant", content: optContent, message_type: (f.type.startsWith("image/") ? "image" : "document") as Message["message_type"], media_url: pastePreview, media_mime_type: f.type, media_filename: f.name, media_caption: caption || null, media_sha256: null, reply_to_id: null, reaction: null, reaction_msg_id: null, latitude: null, longitude: null, location_name: null, location_address: null, whatsapp_msg_id: null, is_deleted: false, is_starred: false, status: "sent", created_at: new Date().toISOString() };
+    const om: Message = { id: tid, conversation_id: selId, role: "assistant", content: optContent, message_type: msgType as Message["message_type"], media_url: pastePreview, media_mime_type: f.type, media_filename: f.name, media_caption: caption || null, media_sha256: null, reply_to_id: null, reaction: null, reaction_msg_id: null, latitude: null, longitude: null, location_name: null, location_address: null, whatsapp_msg_id: null, is_deleted: false, is_starred: false, status: "sent", created_at: new Date().toISOString() };
     setMsgs(p => [...p, om]); setIsAtBottom(true);
     setSending(true);
     // Cleanup preview
@@ -654,13 +655,21 @@ export default function Dashboard() {
               {/* Mobile: + button */}
               <div className="relative sm:hidden flex-shrink-0">
                 <button onClick={e => { e.stopPropagation(); setMobilePlus(!mobilePlus); }} className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0" style={{ color: mobilePlus ? "var(--primary)" : "var(--text-3)", background: mobilePlus ? "var(--primary-muted)" : "transparent", transition: "all 0.25s cubic-bezier(0.16,1,0.3,1)" }}><span className="material-symbols-rounded" style={{ fontSize: 24, transition: "transform 0.25s cubic-bezier(0.16,1,0.3,1)", transform: mobilePlus ? "rotate(45deg)" : "rotate(0deg)" }}>add</span></button>
-                {mobilePlus && <><div className="fixed inset-0 z-[48]" onClick={() => setMobilePlus(false)}/><div className="absolute bottom-full mb-2 left-0 z-[49] rounded-xl overflow-hidden anim-popup" style={{ background: "var(--surface-1)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)", width: 180 }}><button onClick={() => { setMobilePlus(false); if (showQuickReplies) closeQR(); else { setShowQuickReplies(true); setQrMode("list"); setQrSearch(""); } }} className="w-full flex items-center gap-3 px-4 py-3 text-left tr hover:bg-[var(--primary-muted)]" style={{ color: "var(--text-1)", borderBottom: "1px solid var(--border)" }}><span className="material-symbols-rounded" style={{ fontSize: 20, color: "var(--primary)" }}>bolt</span><span className="text-[13px] font-medium">Quick Replies</span></button><button onClick={() => { setMobilePlus(false); document.getElementById("file-input")?.click(); }} className="w-full flex items-center gap-3 px-4 py-3 text-left tr hover:bg-[var(--primary-muted)]" style={{ color: "var(--text-1)" }}><span className="material-symbols-rounded" style={{ fontSize: 20, color: "var(--text-3)" }}>attach_file</span><span className="text-[13px] font-medium">Send File</span></button></div></>}
+                {mobilePlus && <><div className="fixed inset-0 z-[48]" onClick={() => setMobilePlus(false)}/><div className="absolute bottom-full mb-2 left-0 z-[49] rounded-xl overflow-hidden anim-popup" style={{ background: "var(--surface-1)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)", width: 190 }}>
+                  <button onClick={() => { setMobilePlus(false); if (showQuickReplies) closeQR(); else { setShowQuickReplies(true); setQrMode("list"); setQrSearch(""); } }} className="w-full flex items-center gap-3 px-4 py-3 text-left tr hover:bg-[var(--primary-muted)]" style={{ color: "var(--text-1)", borderBottom: "1px solid var(--border)" }}><span className="material-symbols-rounded" style={{ fontSize: 20, color: "var(--primary)" }}>bolt</span><span className="text-[13px] font-medium">Quick Replies</span></button>
+                  <button onClick={() => { setMobilePlus(false); document.getElementById("gallery-input")?.click(); }} className="w-full flex items-center gap-3 px-4 py-3 text-left tr hover:bg-[var(--primary-muted)]" style={{ color: "var(--text-1)", borderBottom: "1px solid var(--border)" }}><span className="material-symbols-rounded" style={{ fontSize: 20, color: "#10b981" }}>photo_library</span><span className="text-[13px] font-medium">Gallery</span></button>
+                  <button onClick={() => { setMobilePlus(false); document.getElementById("file-input")?.click(); }} className="w-full flex items-center gap-3 px-4 py-3 text-left tr hover:bg-[var(--primary-muted)]" style={{ color: "var(--text-1)", borderBottom: "1px solid var(--border)" }}><span className="material-symbols-rounded" style={{ fontSize: 20, color: "#3b82f6" }}>description</span><span className="text-[13px] font-medium">Document</span></button>
+                  <button onClick={() => { setMobilePlus(false); document.getElementById("voice-input")?.click(); }} className="w-full flex items-center gap-3 px-4 py-3 text-left tr hover:bg-[var(--primary-muted)]" style={{ color: "var(--text-1)" }}><span className="material-symbols-rounded" style={{ fontSize: 20, color: "#f59e0b" }}>mic</span><span className="text-[13px] font-medium">Voice</span></button>
+                </div></>}
               </div>
               {/* Desktop buttons */}
               <button onClick={e => { e.stopPropagation(); if (showEmoji) closeEmoji(); else { setShowEmoji(true); setShowQuickReplies(false); setQrClosing(false); } }} className={`${s.iconBtn} hidden sm:flex flex-shrink-0`} style={{ color: showEmoji ? "var(--primary)" : "var(--text-3)", background: showEmoji ? "var(--primary-muted)" : "transparent" }}><span className="material-symbols-rounded" style={{ fontSize: 22 }}>mood</span></button>
               <button onClick={e => { e.stopPropagation(); if (showQuickReplies) closeQR(); else { setShowQuickReplies(true); setShowEmoji(false); setEmojiClosing(false); setQrMode("list"); setQrSearch(""); } }} className={`${s.iconBtn} hidden sm:flex flex-shrink-0`} style={{ color: showQuickReplies ? "var(--primary)" : "var(--text-3)", background: showQuickReplies ? "var(--primary-muted)" : "transparent" }}><span className="material-symbols-rounded" style={{ fontSize: 22 }}>bolt</span></button>
-              <button onClick={() => document.getElementById("file-input")?.click()} className={`${s.iconBtn} hidden sm:flex flex-shrink-0`} style={{ color: "var(--text-3)" }}><span className="material-symbols-rounded" style={{ fontSize: 22 }}>attach_file</span></button>
-              <input id="file-input" type="file" className="hidden" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar" onChange={e => { const f = e.target.files?.[0]; if (!f || !selId) return; setPasteFile(f); setPasteCaption(""); if (f.type.startsWith("image/") || f.type.startsWith("video/")) { setPastePreview(URL.createObjectURL(f)); } else { setPastePreview(null); } e.target.value = ""; }}/>
+              <button onClick={() => document.getElementById("all-file-input")?.click()} className={`${s.iconBtn} hidden sm:flex flex-shrink-0`} style={{ color: "var(--text-3)" }}><span className="material-symbols-rounded" style={{ fontSize: 22 }}>attach_file</span></button>
+              <input id="all-file-input" type="file" className="hidden" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.csv" onChange={e => { const f = e.target.files?.[0]; if (!f || !selId) return; setPasteFile(f); setPasteCaption(""); if (f.type.startsWith("image/") || f.type.startsWith("video/") || f.type.startsWith("audio/")) { setPastePreview(URL.createObjectURL(f)); } else { setPastePreview(null); } e.target.value = ""; }}/>
+              <input id="file-input" type="file" className="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.csv" onChange={e => { const f = e.target.files?.[0]; if (!f || !selId) return; setPasteFile(f); setPasteCaption(""); setPastePreview(null); e.target.value = ""; }}/>
+              <input id="gallery-input" type="file" className="hidden" accept="image/*,video/*" onChange={e => { const f = e.target.files?.[0]; if (!f || !selId) return; setPasteFile(f); setPasteCaption(""); setPastePreview(URL.createObjectURL(f)); e.target.value = ""; }}/>
+              <input id="voice-input" type="file" className="hidden" accept="audio/*,.ogg,.opus,.mp3,.m4a,.wav" onChange={e => { const f = e.target.files?.[0]; if (!f || !selId) return; setPasteFile(f); setPasteCaption(""); setPastePreview(URL.createObjectURL(f)); e.target.value = ""; }}/>
               <div className="flex-1 min-w-0 rounded-2xl px-3 sm:px-4 py-2 relative cursor-text" onClick={() => inputRef.current?.focus()} style={{ background: "var(--surface-3)", border: `1.5px solid ${inputFocused ? "var(--primary)" : "var(--border)"}`, transition: "border-color 0.2s ease" }}>
                 {slashActive && (() => {
                   const matches = quickReplies.filter(qr => !slashQuery || qr.title.toLowerCase().includes(slashQuery.toLowerCase()));
@@ -879,10 +888,11 @@ export default function Dashboard() {
       {pasteFile && (() => {
         const isImg = pasteFile.type.startsWith("image/");
         const isVid = pasteFile.type.startsWith("video/");
+        const isAud = pasteFile.type.startsWith("audio/");
         const ext = pasteFile.name.split(".").pop()?.toUpperCase() || "FILE";
         const sizeStr = pasteFile.size > 1048576 ? (pasteFile.size / 1048576).toFixed(1) + " MB" : (pasteFile.size / 1024).toFixed(0) + " KB";
-        const iconColor = isImg ? "#10b981" : isVid ? "#8b5cf6" : pasteFile.type.includes("pdf") ? "#ef4444" : "#3b82f6";
-        const icon = isImg ? "image" : isVid ? "videocam" : pasteFile.type.includes("pdf") ? "picture_as_pdf" : "description";
+        const iconColor = isImg ? "#10b981" : isVid ? "#8b5cf6" : isAud ? "#f59e0b" : pasteFile.type.includes("pdf") ? "#ef4444" : "#3b82f6";
+        const icon = isImg ? "image" : isVid ? "videocam" : isAud ? "mic" : pasteFile.type.includes("pdf") ? "picture_as_pdf" : "description";
         return <div className="fixed inset-0 z-[250] flex items-center justify-center" style={{ background: "rgba(0,0,0,0.85)" }} onClick={cancelPaste}>
           <div className="flex flex-col m-4 sm:m-8 rounded-3xl overflow-hidden anim-scale-in" style={{ background: "var(--surface-1)", maxWidth: 460, width: "100%", maxHeight: "calc(100vh - 64px)" }} onClick={e => e.stopPropagation()}>
 
@@ -904,6 +914,14 @@ export default function Dashboard() {
                 <img src={pastePreview} alt="" className="max-w-full max-h-full object-contain rounded-lg tr" style={{ transform: `rotate(${pasteRotation}deg)` }}/>
               ) : isVid && pastePreview ? (
                 <video src={pastePreview} controls className="max-w-full max-h-full rounded-lg"/>
+              ) : isAud && pastePreview ? (
+                <div className="flex flex-col items-center gap-4 py-6">
+                  <div className="w-20 h-20 rounded-full flex items-center justify-center" style={{ background: "#f59e0b18" }}>
+                    <span className="material-symbols-rounded" style={{ fontSize: 40, color: "#f59e0b" }}>mic</span>
+                  </div>
+                  <audio src={pastePreview} controls className="w-full max-w-[280px]"/>
+                  <p className="text-[12px] font-medium" style={{ color: "var(--text-3)" }}>Voice message</p>
+                </div>
               ) : (
                 <div className="flex flex-col items-center gap-3 py-6">
                   <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background: `${iconColor}15` }}>
