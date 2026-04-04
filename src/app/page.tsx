@@ -72,7 +72,9 @@ export default function Dashboard() {
   const [msgMenuId, setMsgMenuId] = useState<string|null>(null);
   const [reactPickerId, setReactPickerId] = useState<string|null>(null);
   const [showEmoji, setShowEmoji] = useState(false);
-  const [emojiCat, setEmojiCat] = useState(Object.keys(EMOJIS)[0]);
+  const [emojiClosing, setEmojiClosing] = useState(false);
+  const [emojiCat, setEmojiCat] = useState("recent");
+  const [recentEmojis, setRecentEmojis] = useState<string[]>([]);
   const [imgPreview, setImgPreview] = useState<string|null>(null);
   const [headerMenu, setHeaderMenu] = useState(false);
   const [chatSearch, setChatSearch] = useState("");
@@ -89,12 +91,16 @@ export default function Dashboard() {
   const [forwardSelected, setForwardSelected] = useState<Set<string>>(new Set());
   const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
   const [showQuickReplies, setShowQuickReplies] = useState(false);
+  const [qrClosing, setQrClosing] = useState(false);
   const [qrMode, setQrMode] = useState<"list"|"add"|"edit">("list");
   const [qrTitle, setQrTitle] = useState("");
   const [qrContent, setQrContent] = useState("");
   const [qrCategory, setQrCategory] = useState("");
   const [qrEditId, setQrEditId] = useState<string|null>(null);
   const [qrSearch, setQrSearch] = useState("");
+  const [slashActive, setSlashActive] = useState(false);
+  const [slashQuery, setSlashQuery] = useState("");
+  const [slashIdx, setSlashIdx] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [msgMenuPos, setMsgMenuPos] = useState<{x: number; y: number; isMe: boolean} | null>(null);
   const [sidebarMenu, setSidebarMenu] = useState(false);
@@ -128,10 +134,17 @@ export default function Dashboard() {
   async function createQuickReply() { if (!qrTitle.trim() || !qrContent.trim()) return; try { const r = await fetch("/api/quick-replies", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: qrTitle, content: qrContent, category: qrCategory || null }) }); if (r.ok) { fetchQuickReplies(); setQrTitle(""); setQrContent(""); setQrCategory(""); setQrMode("list"); } } catch {} }
   async function updateQuickReply() { if (!qrEditId || !qrTitle.trim() || !qrContent.trim()) return; try { const r = await fetch(`/api/quick-replies/${qrEditId}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: qrTitle, content: qrContent, category: qrCategory || null }) }); if (r.ok) { fetchQuickReplies(); setQrTitle(""); setQrContent(""); setQrCategory(""); setQrEditId(null); setQrMode("list"); } } catch {} }
   async function deleteQuickReply(id: string) { if (!confirm("Delete this quick reply?")) return; try { await fetch(`/api/quick-replies/${id}`, { method: "DELETE" }); fetchQuickReplies(); } catch {} }
-  function useQuickReply(qr: QuickReply) { let t = qr.content; if (sel) { t = t.replace(/\{name\}/g, sel.name || sel.phone).replace(/\{phone\}/g, sel.phone); } setInput(t); setShowQuickReplies(false); inputRef.current?.focus(); fetch(`/api/quick-replies/${qr.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ use: true }) }).catch(() => {}); }
+  function useQuickReply(qr: QuickReply) { let t = qr.content; if (sel) { t = t.replace(/\{name\}/g, sel.name || sel.phone).replace(/\{phone\}/g, sel.phone); } setInput(t); closeQR(); inputRef.current?.focus(); fetch(`/api/quick-replies/${qr.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ use: true }) }).catch(() => {}); }
+  function selectSlashQR(qr: QuickReply) { let t = qr.content; if (sel) { t = t.replace(/\{name\}/g, sel.name || sel.phone).replace(/\{phone\}/g, sel.phone); } setInput(t); setSlashActive(false); setSlashQuery(""); inputRef.current?.focus(); fetch(`/api/quick-replies/${qr.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ use: true }) }).catch(() => {}); }
 
   /* ═══ EFFECTS (unchanged logic) ═══ */
   useEffect(() => { fetchConvos(); fetchArchived(); fetchLabels(); fetchQuickReplies(); }, [fetchConvos, fetchArchived, fetchLabels, fetchQuickReplies]);
+  // Load recent emojis from localStorage
+  useEffect(() => { try { const r = JSON.parse(localStorage.getItem("wd-recent-emoji") || "[]"); if (Array.isArray(r)) setRecentEmojis(r.slice(0, 32)); } catch {} }, []);
+  function addRecentEmoji(em: string) { const updated = [em, ...recentEmojis.filter(e => e !== em)].slice(0, 32); setRecentEmojis(updated); localStorage.setItem("wd-recent-emoji", JSON.stringify(updated)); }
+  // Smooth close helpers
+  function closeEmoji() { setEmojiClosing(true); setTimeout(() => { setShowEmoji(false); setEmojiClosing(false); }, 200); }
+  function closeQR() { setQrClosing(true); setTimeout(() => { setShowQuickReplies(false); setQrClosing(false); }, 200); }
   useEffect(() => { if (selId) { fetchMsgs(selId); fetch(`/api/conversations/${selId}/read`, { method: "POST" }).catch(() => {}); setConvos(p => p.map(c => c.id === selId ? { ...c, unread_count: 0 } : c)); setIsAtBottom(true); } }, [selId, fetchMsgs]);
   useEffect(() => { if (isAtBottom) { endRef.current?.scrollIntoView({ behavior: "smooth" }); setHasNewMsg(false); } else if (msgs.length > 0) { setHasNewMsg(true); } }, [msgs, isAtBottom]);
 
@@ -182,7 +195,7 @@ export default function Dashboard() {
   function downloadContactsCsv() { window.open("/api/contacts/export", "_blank"); }
   function addOptimisticMsg(tid: string, content: string, type: string = "text") { if (!selId) return; const m: Message = { id: tid, conversation_id: selId, role: "assistant", content, message_type: type as Message["message_type"], media_url: null, media_mime_type: null, media_filename: null, media_caption: null, media_sha256: null, reply_to_id: null, reaction: null, reaction_msg_id: null, latitude: null, longitude: null, location_name: null, location_address: null, whatsapp_msg_id: null, is_deleted: false, is_starred: false, status: "sent", created_at: new Date().toISOString() }; setMsgs(p => [...p, m]); setIsAtBottom(true); }
 
-  useEffect(() => { const h = (e: KeyboardEvent) => { if (e.key === "Escape") { setReplyTo(null); setChatMenuId(null); setMsgMenuId(null); setMsgMenuPos(null); setReactPickerId(null); setShowEmoji(false); setHeaderMenu(false); setImgPreview(null); setShowChatSearch(false); setChatLabelOpen(null); setShowLabelMenu(null); setForwardMsg(null); setForwardSelected(new Set()); setSidebarMenu(false); setShowLabelsModal(false); setShow2FA(false); } }; document.addEventListener("keydown", h); return () => document.removeEventListener("keydown", h); }, []);
+  useEffect(() => { const h = (e: KeyboardEvent) => { if (e.key === "Escape") { setReplyTo(null); setChatMenuId(null); setMsgMenuId(null); setMsgMenuPos(null); setReactPickerId(null); setShowEmoji(false); setHeaderMenu(false); setImgPreview(null); setShowChatSearch(false); setChatLabelOpen(null); setShowLabelMenu(null); setForwardMsg(null); setForwardSelected(new Set()); setSidebarMenu(false); setShowLabelsModal(false); setShow2FA(false); setSlashActive(false); } }; document.addEventListener("keydown", h); return () => document.removeEventListener("keydown", h); }, []);
 
   /* ═══ HELPERS ═══ */
   function ft(d: string) { const t = new Date(d), n = new Date(), df = n.getTime() - t.getTime(); if (df < 86400000 && t.getDate() === n.getDate()) return t.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }); if (df < 172800000) return "Yesterday"; if (df < 604800000) return t.toLocaleDateString([], { weekday: "short" }); return t.toLocaleDateString([], { month: "short", day: "numeric" }); }
@@ -475,29 +488,35 @@ export default function Dashboard() {
           {/* ── Input Area ── */}
           <div className="relative" style={{ background: "var(--bg-raised)", borderTop: "1px solid var(--border)" }}>
 
-            {/* ▓▓ Emoji Popup Overlay ▓▓ */}
-            {showEmoji && <>
-              <div className="fixed inset-0 z-[50]" onClick={() => setShowEmoji(false)}/>
-              <div className="absolute bottom-full left-4 sm:left-10 mb-2 z-[51] rounded-2xl overflow-hidden anim-popup" style={{ background: "var(--surface-1)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)", width: 340, maxHeight: 300 }} onClick={e => e.stopPropagation()}>
-                <div className="flex px-2.5 py-2 gap-1" style={{ borderBottom: "1px solid var(--border)" }}>
+            {/* ▓▓ Emoji Popup ▓▓ */}
+            {(showEmoji || emojiClosing) && <>
+              <div className="fixed inset-0 z-[50]" onClick={closeEmoji}/>
+              <div className={`absolute bottom-full left-4 sm:left-10 mb-2 z-[51] rounded-2xl overflow-hidden ${emojiClosing ? "anim-popup-close" : "anim-popup"}`} style={{ background: "var(--surface-1)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)", width: 340, maxHeight: 300 }} onClick={e => e.stopPropagation()}>
+                <div className="flex px-2 py-1.5 gap-0.5 overflow-x-auto" style={{ borderBottom: "1px solid var(--border)" }}>
+                  <button onClick={() => setEmojiCat("recent")} className="w-9 h-9 rounded-lg flex-shrink-0 flex items-center justify-center tr" style={{ background: emojiCat === "recent" ? "var(--primary-muted)" : "transparent" }}><span className="material-symbols-rounded" style={{ fontSize: 18, color: emojiCat === "recent" ? "var(--primary)" : "var(--text-3)" }}>schedule</span></button>
                   {Object.keys(EMOJIS).map(c => <button key={c} onClick={() => setEmojiCat(c)} className="text-[18px] w-9 h-9 rounded-lg flex-shrink-0 flex items-center justify-center tr" style={{ background: emojiCat === c ? "var(--primary-muted)" : "transparent" }}>{c}</button>)}
                 </div>
                 <div className="p-2.5 overflow-y-auto" style={{ maxHeight: 220 }}>
-                  <div className="flex flex-wrap gap-0.5">{EMOJIS[emojiCat]?.map((em, i) => <button key={i} onClick={() => { setInput(p => p + em); setShowEmoji(false); inputRef.current?.focus(); }} className="w-10 h-10 text-[22px] rounded-lg flex items-center justify-center tr hover:bg-[var(--primary-muted)] hover:scale-110">{em}</button>)}</div>
+                  {emojiCat === "recent" ? (
+                    recentEmojis.length === 0 ? <p className="text-center py-6 text-[12px]" style={{ color: "var(--text-4)" }}>No recent emojis yet</p> :
+                    <div className="flex flex-wrap gap-0.5">{recentEmojis.map((em, i) => <button key={i} onClick={() => { addRecentEmoji(em); setInput(p => p + em); closeEmoji(); inputRef.current?.focus(); }} className="w-10 h-10 text-[22px] rounded-lg flex items-center justify-center tr hover:bg-[var(--primary-muted)] hover:scale-110">{em}</button>)}</div>
+                  ) : (
+                    <div className="flex flex-wrap gap-0.5">{EMOJIS[emojiCat]?.map((em, i) => <button key={i} onClick={() => { addRecentEmoji(em); setInput(p => p + em); closeEmoji(); inputRef.current?.focus(); }} className="w-10 h-10 text-[22px] rounded-lg flex items-center justify-center tr hover:bg-[var(--primary-muted)] hover:scale-110">{em}</button>)}</div>
+                  )}
                 </div>
               </div>
             </>}
 
-            {/* ▓▓ Quick Replies Popup Overlay ▓▓ */}
-            {showQuickReplies && <>
-              <div className="fixed inset-0 z-[50]" onClick={() => setShowQuickReplies(false)}/>
-              <div className="absolute bottom-full left-4 sm:left-10 mb-2 z-[51] rounded-2xl overflow-hidden anim-popup" style={{ background: "var(--surface-1)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)", width: 380, maxWidth: "calc(100vw - 32px)", maxHeight: 380 }} onClick={e => e.stopPropagation()}>
+            {/* ▓▓ Quick Replies Popup ▓▓ */}
+            {(showQuickReplies || qrClosing) && <>
+              <div className="fixed inset-0 z-[50]" onClick={closeQR}/>
+              <div className={`absolute bottom-full left-4 sm:left-10 mb-2 z-[51] rounded-2xl overflow-hidden ${qrClosing ? "anim-popup-close" : "anim-popup"}`} style={{ background: "var(--surface-1)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)", width: 380, maxWidth: "calc(100vw - 32px)", maxHeight: 380 }} onClick={e => e.stopPropagation()}>
                 <div className="flex items-center justify-between px-4 py-2.5" style={{ borderBottom: "1px solid var(--border)" }}>
                   <span className="text-[13px] font-bold" style={{ color: "var(--text-1)" }}>⚡ Quick Replies</span>
                   <div className="flex gap-1.5">
                     {qrMode === "list" && <button onClick={() => { setQrMode("add"); setQrTitle(""); setQrContent(""); setQrCategory(""); }} className="text-[11px] px-3 py-1 rounded-lg font-bold" style={{ background: "var(--primary)", color: "var(--primary-text)" }}>+ New</button>}
                     {qrMode !== "list" && <button onClick={() => { setQrMode("list"); setQrEditId(null); }} className="text-[11px] px-2 py-1 font-medium" style={{ color: "var(--text-3)" }}>← Back</button>}
-                    <button onClick={() => setShowQuickReplies(false)} className="w-7 h-7 rounded-lg flex items-center justify-center tr hover:bg-[var(--surface-3)]" style={{ color: "var(--text-4)" }}><span className="material-symbols-rounded" style={{ fontSize: 18 }}>close</span></button>
+                    <button onClick={closeQR} className="w-7 h-7 rounded-lg flex items-center justify-center tr hover:bg-[var(--surface-3)]" style={{ color: "var(--text-4)" }}><span className="material-symbols-rounded" style={{ fontSize: 18 }}>close</span></button>
                   </div>
                 </div>
                 {qrMode === "list" && <>
@@ -518,13 +537,53 @@ export default function Dashboard() {
               </div>
             </>}
 
+            {/* ▓▓ Slash Command Popup ▓▓ */}
+            {slashActive && (() => {
+              const matches = quickReplies.filter(qr => !slashQuery || qr.title.toLowerCase().includes(slashQuery.toLowerCase()));
+              if (matches.length === 0) return null;
+              return <>
+                <div className="fixed inset-0 z-[49]" onClick={() => setSlashActive(false)}/>
+                <div className="absolute bottom-full left-4 sm:left-10 mb-2 z-[50] rounded-xl overflow-hidden anim-popup" style={{ background: "var(--surface-1)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)", width: 320, maxWidth: "calc(100vw - 32px)" }} onClick={e => e.stopPropagation()}>
+                  <div className="px-3 py-2 flex items-center gap-2" style={{ borderBottom: "1px solid var(--border)" }}>
+                    <span className="text-[12px] font-bold px-1.5 py-0.5 rounded" style={{ background: "var(--primary-muted)", color: "var(--primary)" }}>/</span>
+                    <span className="text-[12px] font-medium" style={{ color: "var(--text-3)" }}>Quick reply search</span>
+                    <span className="text-[10px] ml-auto" style={{ color: "var(--text-4)" }}>↑↓ select · Enter use</span>
+                  </div>
+                  <div className="overflow-y-auto" style={{ maxHeight: 200 }}>
+                    {matches.map((qr, i) => <button key={qr.id} onClick={() => { selectSlashQR(qr); }} className="w-full flex items-start gap-2 px-3 py-2.5 text-left tr" style={{ background: i === slashIdx ? "var(--primary-muted)" : "transparent" }}>
+                      <span className="text-[12px] font-bold" style={{ color: "var(--primary)" }}>{qr.title}</span>
+                      <span className="text-[11px] truncate flex-1" style={{ color: "var(--text-3)" }}>{qr.content.slice(0, 60)}</span>
+                    </button>)}
+                  </div>
+                </div>
+              </>;
+            })()}
+
             {/* Input Bar */}
             <div className="px-4 sm:px-10 lg:px-16 py-3 flex items-end gap-2">
-              <button onClick={e => { e.stopPropagation(); setShowEmoji(!showEmoji); setShowQuickReplies(false); }} className={s.iconBtn} style={{ color: showEmoji ? "var(--primary)" : "var(--text-3)", background: showEmoji ? "var(--primary-muted)" : "transparent" }}><span className="material-symbols-rounded" style={{ fontSize: 22 }}>mood</span></button>
-              <button onClick={e => { e.stopPropagation(); setShowQuickReplies(!showQuickReplies); setShowEmoji(false); setQrMode("list"); setQrSearch(""); }} className={s.iconBtn} style={{ color: showQuickReplies ? "var(--primary)" : "var(--text-3)", background: showQuickReplies ? "var(--primary-muted)" : "transparent" }} title="Quick Replies"><span className="material-symbols-rounded" style={{ fontSize: 22 }}>bolt</span></button>
+              <button onClick={e => { e.stopPropagation(); if (showEmoji) closeEmoji(); else { setShowEmoji(true); closeQR(); } }} className={s.iconBtn} style={{ color: showEmoji ? "var(--primary)" : "var(--text-3)", background: showEmoji ? "var(--primary-muted)" : "transparent" }}><span className="material-symbols-rounded" style={{ fontSize: 22 }}>mood</span></button>
+              <button onClick={e => { e.stopPropagation(); if (showQuickReplies) closeQR(); else { setShowQuickReplies(true); closeEmoji(); setQrMode("list"); setQrSearch(""); } }} className={s.iconBtn} style={{ color: showQuickReplies ? "var(--primary)" : "var(--text-3)", background: showQuickReplies ? "var(--primary-muted)" : "transparent" }} title="Quick Replies"><span className="material-symbols-rounded" style={{ fontSize: 22 }}>bolt</span></button>
               <button onClick={() => document.getElementById("file-input")?.click()} className={s.iconBtn} style={{ color: "var(--text-3)" }} title="Attach"><span className="material-symbols-rounded" style={{ fontSize: 22 }}>attach_file</span></button>
               <input id="file-input" type="file" className="hidden" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar" onChange={async e => { const f = e.target.files?.[0]; if (!f || !selId) return; const ic = f.type.startsWith("image/") ? "📷" : f.type.startsWith("video/") ? "🎥" : "📄"; const tid = `temp_file_${Date.now()}`; addOptimisticMsg(tid, `${ic} Sending ${f.name}...`, f.type.startsWith("image/") ? "image" : "document"); setSending(true); try { const fd = new FormData(); fd.append("file", f); fd.append("caption", ""); const res = await fetch(`/api/conversations/${selId}/send-media`, { method: "POST", body: fd }); if (!res.ok) { setMsgs(p => p.filter(m => m.id !== tid)); const d = await res.json(); alert("Error: " + JSON.stringify(d)); setSending(false); } else { const real = await res.json(); lastSentIdsRef.current.add(real.id); setMsgs(p => p.map(m => m.id === tid ? { ...real } : m)); setTimeout(() => { setSending(false); setTimeout(() => lastSentIdsRef.current.delete(real.id), 10000); }, 3000); } } catch (err) { setMsgs(p => p.filter(m => m.id !== tid)); alert("Error: " + String(err)); setSending(false); } finally { e.target.value = ""; } }}/>
-              <div className="flex-1 rounded-2xl px-4 py-2.5 tr" style={{ background: "var(--surface-3)", border: "1.5px solid transparent" }}><textarea ref={inputRef} value={input} onChange={e => { setInput(e.target.value); e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px"; }} onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }} placeholder="Type a message" rows={1} className="w-full bg-transparent text-[14px] focus:outline-none resize-none leading-[1.45] max-h-[120px] overflow-y-auto" style={{ color: "var(--text-1)", height: "auto" }}/></div>
+              <div className="flex-1 rounded-2xl px-4 py-2.5 tr" style={{ background: "var(--surface-3)", border: "1.5px solid transparent" }}>
+                <textarea ref={inputRef} value={input} onChange={e => {
+                  const v = e.target.value; setInput(v);
+                  e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
+                  // Slash command detection
+                  if (v.startsWith("/")) { setSlashActive(true); setSlashQuery(v.slice(1)); setSlashIdx(0); }
+                  else { setSlashActive(false); setSlashQuery(""); }
+                }} onKeyDown={e => {
+                  if (slashActive) {
+                    const matches = quickReplies.filter(qr => !slashQuery || qr.title.toLowerCase().includes(slashQuery.toLowerCase()));
+                    if (e.key === "ArrowDown") { e.preventDefault(); setSlashIdx(i => Math.min(i + 1, matches.length - 1)); }
+                    else if (e.key === "ArrowUp") { e.preventDefault(); setSlashIdx(i => Math.max(i - 1, 0)); }
+                    else if (e.key === "Enter" && matches[slashIdx]) { e.preventDefault(); selectSlashQR(matches[slashIdx]); }
+                    else if (e.key === "Escape") { setSlashActive(false); }
+                    return;
+                  }
+                  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
+                }} placeholder="Type a message or / for quick replies" rows={1} className="w-full bg-transparent text-[14px] focus:outline-none resize-none leading-[1.45] max-h-[120px] overflow-y-auto" style={{ color: "var(--text-1)", height: "auto" }}/>
+              </div>
               <button onClick={handleSend} disabled={sending || !input.trim()} className="w-10 h-10 rounded-xl disabled:opacity-20 tr flex items-center justify-center flex-shrink-0 shadow-sm hover:shadow-md" style={{ background: "var(--primary)" }}>
                 {sending ? <span className="material-symbols-rounded animate-spin" style={{ fontSize: 20, color: "var(--primary-text)" }}>progress_activity</span>
                 : <span className="material-symbols-rounded" style={{ fontSize: 20, color: "var(--primary-text)", fontVariationSettings: "'FILL' 1" }}>send</span>}
