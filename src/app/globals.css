@@ -149,6 +149,7 @@ audio::-webkit-media-controls-panel { background: var(--surface-2); border-radiu
 @keyframes popupIn { from { opacity: 0; transform: scale(0.5); } to { opacity: 1; transform: scale(1); } }
 @keyframes popupOut { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.5); } }
 @keyframes menuIn { from { opacity: 0; transform: scale(0.88); } to { opacity: 1; transform: scale(1); } }
+@keyframes menuOut { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.88); } }
 @keyframes modalIn { from { opacity: 0; transform: scale(0.94); } to { opacity: 1; transform: scale(1); } }
 @keyframes overlayIn { from { opacity: 0; } to { opacity: 1; } }
 
@@ -162,6 +163,7 @@ audio::-webkit-media-controls-panel { background: var(--surface-2); border-radiu
 .plus-closed { transform: rotate(0deg); }
 .anim-popup-right { animation: popupIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1); transform-origin: bottom center; }
 .anim-menu { animation: menuIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) both; transform-origin: top right; }
+.anim-menu-out { animation: menuOut 0.15s ease-in both; transform-origin: top right; }
 .anim-menu-left { animation: menuIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) both; transform-origin: top left; }
 .anim-modal { animation: modalIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) both; }
 .anim-overlay { animation: overlayIn 0.25s ease both; }

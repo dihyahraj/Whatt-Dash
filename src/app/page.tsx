@@ -93,6 +93,7 @@ export default function Dashboard() {
   const [editLabelId, setEditLabelId] = useState<string|null>(null);
   const [editLabelName, setEditLabelName] = useState("");
   const [editLabelColor, setEditLabelColor] = useState("");
+  const [menuClosing, setMenuClosing] = useState(false);
   const [forwardMsg, setForwardMsg] = useState<Message|null>(null);
   const [forwardSelected, setForwardSelected] = useState<Set<string>>(new Set());
   const [quickReplies, setQuickReplies] = useState<QuickReply[]>([]);
@@ -207,6 +208,26 @@ export default function Dashboard() {
 
   /* ═══ ACTIONS ═══ */
   function closeMenus() { setChatMenuId(null); setHeaderMenu(false); setMsgMenuId(null); setMsgMenuPos(null); setSidebarMenu(false); }
+  function closeAllMenus() {
+    if (!chatMenuId && !msgMenuId && !headerMenu && !reactPickerId && !sidebarMenu && !labelMenuId) return;
+    setMenuClosing(true);
+    setTimeout(() => {
+      setChatMenuId(null); setMsgMenuId(null); setMsgMenuPos(null); setHeaderMenu(false);
+      setReactPickerId(null); setShowLabelMenu(null); setChatLabelOpen(null);
+      setSidebarMenu(false); setLabelMenuId(null); setMenuClosing(false);
+    }, 150);
+  }
+  // Close menus on outside click (no fixed backdrop needed — scroll works)
+  useEffect(() => {
+    const h = (e: MouseEvent) => {
+      if (!(chatMenuId || msgMenuId || headerMenu || reactPickerId || sidebarMenu || labelMenuId)) return;
+      const t = e.target as HTMLElement;
+      if (t.closest("[data-menu]")) return; // click inside a menu
+      closeAllMenus();
+    };
+    document.addEventListener("mousedown", h);
+    return () => document.removeEventListener("mousedown", h);
+  });
   function pausePoll(ms = 4000) { skipPollRef.current = true; setTimeout(() => { skipPollRef.current = false; }, ms); }
 
   async function act(url: string, body?: object) { closeMenus(); pausePoll(); if (body && typeof body === "object") { const b = body as Record<string, unknown>; const cid = url.match(/conversations\/([^/]+)\//)?.[1]; if ("archived" in b && b.archived) { const chat = convos.find(c => c.id === cid); setConvos(p => p.filter(c => c.id !== cid)); if (chat) setArchived(p => [{ ...chat, is_archived: true }, ...p]); if (selId === cid) { setSelId(null); setMsgs([]); } } else { setConvos(p => p.map(c => { if (c.id !== cid) return c; if ("pinned" in b) return { ...c, is_pinned: !!b.pinned }; if ("muted" in b) return { ...c, is_muted: !!b.muted }; if ("unread_count" in b) return { ...c, unread_count: b.unread_count as number }; return c; })); } } fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined }).catch(() => {}); }
@@ -274,7 +295,7 @@ export default function Dashboard() {
   /* ═══ CONTEXT MENU ═══ */
   function ChatCtx({ convo, onClose }: { convo: ConversationWithLastMessage; onClose: () => void }) {
     const lo = chatLabelOpen === convo.id;
-    return <div className="rounded-2xl py-1 min-w-[200px] anim-menu overflow-hidden" style={{ background: "var(--surface-2)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)", backdropFilter: "blur(16px)", position: "absolute", right: 0, top: "100%", marginTop: 4, zIndex: 100 }} onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()}>
+    return <div data-menu className={`rounded-2xl py-1 min-w-[200px] overflow-hidden ${menuClosing ? "anim-menu-out" : "anim-menu"}`} style={{ background: "var(--surface-2)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)", backdropFilter: "blur(16px)", position: "absolute", right: 0, top: "100%", marginTop: 4, zIndex: 100 }} onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()}>
       <MI i="push_pin" l={convo.is_pinned ? "Unpin" : "Pin"} o={() => { act(`/api/conversations/${convo.id}/pin`, { pinned: !convo.is_pinned }); onClose(); }}/>
       <MI i={convo.is_muted ? "notifications_active" : "notifications_off"} l={convo.is_muted ? "Unmute" : "Mute"} o={() => { act(`/api/conversations/${convo.id}/mute`, { muted: !convo.is_muted }); onClose(); }}/>
       <MI i="mark_email_unread" l="Mark unread" o={() => { act(`/api/conversations/${convo.id}/unread`, { unread_count: 1 }); onClose(); }}/>
@@ -377,8 +398,8 @@ export default function Dashboard() {
             <div className="flex items-center gap-0.5">
               <button onClick={() => setShowSearch(!showSearch)} className={s.iconBtn} style={{ color: "var(--text-3)" }}><span className="material-symbols-rounded" style={{ fontSize: 20 }}>search</span></button>
               <div className="relative">
-                <button onClick={e => { e.stopPropagation(); setSidebarMenu(!sidebarMenu); }} className={s.iconBtn} style={{ color: "var(--text-3)" }}><span className="material-symbols-rounded" style={{ fontSize: 20 }}>more_vert</span></button>
-                {sidebarMenu && <div className="anim-menu" style={{ background: "var(--surface-2)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)", backdropFilter: "blur(20px)", position: "absolute", right: 0, top: "100%", marginTop: 4, zIndex: 100, minWidth: 220, borderRadius: 16, overflow: "hidden" }} onClick={e => e.stopPropagation()}>
+                <button onMouseDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); setSidebarMenu(!sidebarMenu); }} className={s.iconBtn} style={{ color: "var(--text-3)" }}><span className="material-symbols-rounded" style={{ fontSize: 20 }}>more_vert</span></button>
+                {sidebarMenu && <div data-menu className={menuClosing ? "anim-menu-out" : "anim-menu"} style={{ background: "var(--surface-2)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)", backdropFilter: "blur(20px)", position: "absolute", right: 0, top: "100%", marginTop: 4, zIndex: 100, minWidth: 220, borderRadius: 16, overflow: "hidden" }} onClick={e => e.stopPropagation()}>
                   {/* Theme Section */}
                   <div className="px-4 pt-2.5 pb-1"><p className="text-[10px] font-bold tracking-[0.08em] uppercase" style={{ color: "var(--text-4)" }}>Theme</p></div>
                   <div className="px-3 pb-1.5 flex gap-1">
@@ -436,7 +457,7 @@ export default function Dashboard() {
                   </div>
                 </div>
                 <div className="relative flex-shrink-0">
-                  <button onClick={e => { e.stopPropagation(); setChatMenuId(chatMenuId === c.id ? null : c.id); }} className="w-8 h-8 rounded-lg flex items-center justify-center tr opacity-40 hover:opacity-100 group-hover:opacity-80" style={{ color: "var(--text-3)" }}><span className="material-symbols-rounded" style={{ fontSize: 18 }}>more_vert</span></button>
+                  <button onMouseDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); setChatMenuId(chatMenuId === c.id ? null : c.id); }} className="w-8 h-8 rounded-lg flex items-center justify-center tr opacity-40 hover:opacity-100 group-hover:opacity-80" style={{ color: "var(--text-3)" }}><span className="material-symbols-rounded" style={{ fontSize: 18 }}>more_vert</span></button>
                   {chatMenuId === c.id && <ChatCtx convo={c} onClose={() => setChatMenuId(null)}/>}
                 </div>
               </div>
@@ -476,8 +497,8 @@ export default function Dashboard() {
             <div className="flex items-center">
               <button onClick={() => { setShowChatSearch(!showChatSearch); setChatSearch(""); }} className={s.iconBtn} style={{ color: "var(--text-3)" }}><span className="material-symbols-rounded" style={{ fontSize: 20 }}>search</span></button>
               <div className="relative">
-                <button onClick={e => { e.stopPropagation(); setHeaderMenu(!headerMenu); setChatMenuId(null); setMsgMenuId(null); }} className={s.iconBtn} style={{ color: "var(--text-3)" }}><span className="material-symbols-rounded" style={{ fontSize: 20 }}>more_vert</span></button>
-                {headerMenu && <div className="anim-menu" style={{ background: "var(--surface-2)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)", backdropFilter: "blur(16px)", position: "absolute", right: 0, top: "100%", marginTop: 4, zIndex: 100, borderRadius: 16, overflow: "hidden" }} onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()}>
+                <button onMouseDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); setHeaderMenu(!headerMenu); setChatMenuId(null); setMsgMenuId(null); }} className={s.iconBtn} style={{ color: "var(--text-3)" }}><span className="material-symbols-rounded" style={{ fontSize: 20 }}>more_vert</span></button>
+                {headerMenu && <div data-menu className={menuClosing ? "anim-menu-out" : "anim-menu"} style={{ background: "var(--surface-2)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)", backdropFilter: "blur(16px)", position: "absolute", right: 0, top: "100%", marginTop: 4, zIndex: 100, borderRadius: 16, overflow: "hidden" }} onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()}>
                   <MI i="push_pin" l={sel.is_pinned ? "Unpin" : "Pin"} o={() => act(`/api/conversations/${sel.id}/pin`, { pinned: !sel.is_pinned })}/>
                   <MI i={sel.is_muted ? "notifications_active" : "notifications_off"} l={sel.is_muted ? "Unmute" : "Mute"} o={() => act(`/api/conversations/${sel.id}/mute`, { muted: !sel.is_muted })}/>
                   <MI i="mark_email_unread" l="Mark unread" o={() => act(`/api/conversations/${sel.id}/unread`, { unread_count: 1 })}/>
@@ -504,12 +525,12 @@ export default function Dashboard() {
                   <div className="relative max-w-[85%] sm:max-w-[65%]">
                     {replied && <div className="px-3 py-2 rounded-t-2xl text-[11px]" style={{ background: isMe ? "var(--bubble-me)" : "var(--bubble-them)", borderLeft: "3px solid var(--primary)", opacity: 0.85 }}><p className="font-bold text-[10px]" style={{ color: "var(--primary)" }}>{replied.role === "user" ? (sel?.name || sel?.phone) : "You"}</p><p className="truncate" style={{ color: "var(--text-3)" }}>{replied.content}</p></div>}
                     <div className={`relative px-3 py-[7px] ${msg.message_type === "sticker" ? "" : replied ? "rounded-b-2xl" : "rounded-2xl"}`} style={msg.message_type === "sticker" ? {} : { background: isMe ? "var(--bubble-me)" : "var(--bubble-them)", color: isMe ? "var(--bubble-me-text)" : "var(--bubble-them-text)", boxShadow: "var(--shadow-sm)", ...(isMe && !replied ? { borderTopRightRadius: "6px" } : !isMe && !replied ? { borderTopLeftRadius: "6px" } : {}) }}>
-                      {!msg.is_deleted && <div className="absolute right-0 top-0 opacity-0 group-hover/m:opacity-100 z-10"><button onClick={e => { e.stopPropagation(); const rect = e.currentTarget.getBoundingClientRect(); setMsgMenuPos(msgMenuId === msg.id ? null : { x: isMe ? rect.right : rect.left, y: rect.bottom + 4, isMe }); setMsgMenuId(msgMenuId === msg.id ? null : msg.id); setChatMenuId(null); setHeaderMenu(false); }} className="w-7 h-7 rounded-bl-xl flex items-center justify-center" style={{ background: isMe ? "var(--bubble-me)" : "var(--bubble-them)" }}><span className="material-symbols-rounded" style={{ fontSize: 16, color: "var(--text-3)" }}>expand_more</span></button></div>}
+                      {!msg.is_deleted && <div className="absolute right-0 top-0 opacity-0 group-hover/m:opacity-100 z-10"><button onMouseDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); const rect = e.currentTarget.getBoundingClientRect(); setMsgMenuPos(msgMenuId === msg.id ? null : { x: isMe ? rect.right : rect.left, y: rect.bottom + 4, isMe }); setMsgMenuId(msgMenuId === msg.id ? null : msg.id); setChatMenuId(null); setHeaderMenu(false); }} className="w-7 h-7 rounded-bl-xl flex items-center justify-center" style={{ background: isMe ? "var(--bubble-me)" : "var(--bubble-them)" }}><span className="material-symbols-rounded" style={{ fontSize: 16, color: "var(--text-3)" }}>expand_more</span></button></div>}
                       {media(msg)}
                       <div className="flex items-center justify-end gap-0.5 mt-0.5">{msg.is_starred && <span className="material-symbols-rounded" style={{ fontSize: 12, color: "#eab308", fontVariationSettings: "'FILL' 1" }}>star</span>}<span className="text-[10px]" style={{ color: isMe ? "var(--bubble-me-meta)" : "var(--text-4)" }}>{mt(msg.created_at)}</span>{isMe && si(msg.status || "sent")}</div>
                     </div>
                     {msg.reaction && <div className="absolute -bottom-3 rounded-full px-1.5 py-0.5 text-[12px] cursor-pointer hover:scale-110 tr" style={{ ...(isMe ? { right: 8 } : { left: 8 }), background: "var(--surface-1)", boxShadow: "var(--shadow-md)", border: "1px solid var(--border)" }} onClick={e => { e.stopPropagation(); reactMsg(msg.id, msg.reaction!); }}>{msg.reaction}</div>}
-                    {reactPickerId === msg.id && <div className={`absolute ${isMe ? "right-0" : "left-0"} -top-12 z-[100] rounded-full px-2 py-1.5 flex gap-0.5 anim-scale-in`} style={{ background: "var(--surface-1)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)" }} onClick={e => e.stopPropagation()}>{QUICK_REACT.map(e => <button key={e} onClick={() => reactMsg(msg.id, e)} className="text-[18px] hover:scale-125 tr w-8 h-8 rounded-full flex items-center justify-center hover:bg-[var(--primary-muted)]">{e}</button>)}</div>}
+                    {reactPickerId === msg.id && <div data-menu className={`absolute ${isMe ? "right-0" : "left-0"} -top-12 z-[100] rounded-full px-2 py-1.5 flex gap-0.5 ${menuClosing ? "anim-menu-out" : "anim-scale-in"}`} style={{ background: "var(--surface-1)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)" }} onClick={e => e.stopPropagation()}>{QUICK_REACT.map(e => <button key={e} onClick={() => reactMsg(msg.id, e)} className="text-[18px] hover:scale-125 tr w-8 h-8 rounded-full flex items-center justify-center hover:bg-[var(--primary-muted)]">{e}</button>)}</div>}
                   </div>
                 </div>
               </div>;
@@ -792,7 +813,7 @@ export default function Dashboard() {
         if (!curMsg) return null;
         const menuH = 220; // approx height of 5 items
         const flipUp = msgMenuPos.y + menuH > window.innerHeight - 20;
-        return <div className="fixed z-[200] anim-scale-in rounded-2xl py-1.5 min-w-[200px]" style={{ top: flipUp ? msgMenuPos.y - menuH - 40 : msgMenuPos.y, left: msgMenuPos.isMe ? undefined : msgMenuPos.x, right: msgMenuPos.isMe ? window.innerWidth - msgMenuPos.x : undefined, background: "var(--surface-2)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)", backdropFilter: "blur(20px)" }} onClick={e => e.stopPropagation()}>
+        return <div data-menu className={`fixed z-[200] rounded-2xl py-1.5 min-w-[200px] ${menuClosing ? "anim-menu-out" : "anim-scale-in"}`} style={{ top: flipUp ? msgMenuPos.y - menuH - 40 : msgMenuPos.y, left: msgMenuPos.isMe ? undefined : msgMenuPos.x, right: msgMenuPos.isMe ? window.innerWidth - msgMenuPos.x : undefined, background: "var(--surface-2)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)", backdropFilter: "blur(20px)" }} onClick={e => e.stopPropagation()}>
           <MI i="reply" l="Reply" o={() => { setReplyTo(curMsg); setMsgMenuId(null); setMsgMenuPos(null); inputRef.current?.focus(); }}/>
           <MI i="add_reaction" l="React" o={() => { setReactPickerId(curMsg.id); setMsgMenuId(null); setMsgMenuPos(null); }}/>
           <MI i={curMsg.is_starred ? "star" : "star_outline"} l={curMsg.is_starred ? "Unstar" : "Star"} o={() => { starMsg(curMsg.id, !curMsg.is_starred); setMsgMenuPos(null); }}/>
@@ -815,7 +836,7 @@ export default function Dashboard() {
         </div>
       </div>}
 
-      {(chatMenuId || msgMenuId || headerMenu || reactPickerId || sidebarMenu || labelMenuId) && <div className="fixed inset-0 z-[90]" onClick={() => { setChatMenuId(null); setMsgMenuId(null); setMsgMenuPos(null); setHeaderMenu(false); setReactPickerId(null); setShowLabelMenu(null); setChatLabelOpen(null); setSidebarMenu(false); setLabelMenuId(null); }}/>}
+      {/* No fixed backdrop — document click listener handles closing */}
     </div>
   );
 }
