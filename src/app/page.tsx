@@ -692,7 +692,7 @@ export default function Dashboard() {
                     {labelMenuId === l.id && <><div className="fixed inset-0 z-[9]" onClick={() => setLabelMenuId(null)}/><div className="absolute right-4 top-full z-[10] rounded-xl overflow-hidden anim-menu" style={{ background: "var(--surface-1)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)", minWidth: 140 }}>
                       <button onClick={() => { setEditLabelId(l.id); setEditLabelName(l.name); setEditLabelColor(l.color); setLabelMenuId(null); }} className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-left tr hover:bg-[var(--surface-3)]"><span className="material-symbols-rounded" style={{ fontSize: 16, color: "var(--text-3)" }}>edit</span><span className="text-[13px] font-medium" style={{ color: "var(--text-1)" }}>Edit</span></button>
                       <button onClick={() => { setLabelMenuId(null); deleteLabel(l.id); }} className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-left tr hover:bg-[var(--danger-muted)]"><span className="material-symbols-rounded" style={{ fontSize: 16, color: "var(--danger)" }}>delete</span><span className="text-[13px] font-medium" style={{ color: "var(--danger)" }}>Delete</span></button>
-                    </div>}
+                    </div></>}
                   </>}
                 </div>)}
               </>}
@@ -716,7 +716,7 @@ export default function Dashboard() {
                     {labelMenuId === l.id && <><div className="fixed inset-0 z-[9]" onClick={() => setLabelMenuId(null)}/><div className="absolute right-4 top-full z-[10] rounded-xl overflow-hidden anim-menu" style={{ background: "var(--surface-1)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)", minWidth: 140 }}>
                       <button onClick={() => { setEditLabelId(l.id); setEditLabelName(l.name); setEditLabelColor(l.color); setLabelMenuId(null); }} className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-left tr hover:bg-[var(--surface-3)]"><span className="material-symbols-rounded" style={{ fontSize: 16, color: "var(--text-3)" }}>edit</span><span className="text-[13px] font-medium" style={{ color: "var(--text-1)" }}>Edit</span></button>
                       <button onClick={() => { setLabelMenuId(null); deleteLabel(l.id); }} className="w-full flex items-center gap-2.5 px-3.5 py-2.5 text-left tr hover:bg-[var(--danger-muted)]"><span className="material-symbols-rounded" style={{ fontSize: 16, color: "var(--danger)" }}>delete</span><span className="text-[13px] font-medium" style={{ color: "var(--danger)" }}>Delete</span></button>
-                    </div>}
+                    </div></>}
                   </>}
                 </div>)}
               </div>)}
