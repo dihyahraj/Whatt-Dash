@@ -1019,10 +1019,7 @@ function VoicePlayer({ src, msgId }: { src: string; msgId: string }) {
             return <div key={i} className="rounded-full" style={{ width: 3, height: `${h * 100}%`, minHeight: 4, background: filled ? "var(--primary)" : "var(--text-4)", opacity: filled ? 1 : 0.3, transition: "background 0.15s, opacity 0.15s" }}/>;
           })}
         </div>
-        <div className="flex items-center justify-between mt-1">
-          <span className="text-[10px] font-semibold tabular-nums" style={{ color: playing ? "var(--primary)" : "var(--text-3)" }}>{fmt(currentTime > 0 ? currentTime : 0)}</span>
-          <span className="text-[10px] font-medium tabular-nums" style={{ color: "var(--text-4)" }}>{fmt(duration)}</span>
-        </div>
+        <span className="text-[10px] font-semibold mt-1 tabular-nums" style={{ color: playing ? "var(--primary)" : "var(--text-3)" }}>{playing || currentTime > 0 ? fmt(currentTime) : fmt(duration)}</span>
       </div>
     </div>
   );
