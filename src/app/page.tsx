@@ -82,6 +82,7 @@ export default function Dashboard() {
   const [pastePreview, setPastePreview] = useState<string|null>(null);
   const [pasteCaption, setPasteCaption] = useState("");
   const [pasteRotation, setPasteRotation] = useState(0);
+  const [pasteForceType, setPasteForceType] = useState<string|null>(null);
   const [headerMenu, setHeaderMenu] = useState(false);
   const [chatSearch, setChatSearch] = useState("");
   const [showChatSearch, setShowChatSearch] = useState(false);
@@ -163,14 +164,14 @@ export default function Dashboard() {
     const caption = pasteCaption; // Save before clearing state
     const ic = f.type.startsWith("image/") ? "📷" : f.type.startsWith("video/") ? "🎥" : f.type.startsWith("audio/") ? "🎵" : "📄";
     const tid = `temp_paste_${Date.now()}`;
-    const msgType = f.type.startsWith("image/") ? "image" : f.type.startsWith("video/") ? "video" : f.type.startsWith("audio/") ? "audio" : "document";
+    const msgType = pasteForceType || (f.type.startsWith("image/") ? "image" : f.type.startsWith("video/") ? "video" : f.type.startsWith("audio/") ? "audio" : "document");
     const optContent = caption ? `${ic} ${caption}` : `${ic} Sending ${f.name}...`;
     const om: Message = { id: tid, conversation_id: selId, role: "assistant", content: optContent, message_type: msgType as Message["message_type"], media_url: pastePreview, media_mime_type: f.type, media_filename: f.name, media_caption: caption || null, media_sha256: null, reply_to_id: null, reaction: null, reaction_msg_id: null, latitude: null, longitude: null, location_name: null, location_address: null, whatsapp_msg_id: null, is_deleted: false, is_starred: false, status: "sent", created_at: new Date().toISOString() };
     setMsgs(p => [...p, om]); setIsAtBottom(true);
     setSending(true);
     // Cleanup preview
     if (pastePreview) URL.revokeObjectURL(pastePreview);
-    setPasteFile(null); setPastePreview(null); setPasteCaption(""); setPasteRotation(0);
+    setPasteFile(null); setPastePreview(null); setPasteCaption(""); setPasteRotation(0); setPasteForceType(null);
     try {
       const fd = new FormData(); fd.append("file", f); fd.append("caption", caption);
       const res = await fetch(`/api/conversations/${selId}/send-media`, { method: "POST", body: fd });
@@ -178,7 +179,7 @@ export default function Dashboard() {
       else { const real = await res.json(); lastSentIdsRef.current.add(real.id); setMsgs(p => p.map(m => m.id === tid ? { ...real } : m)); setTimeout(() => { setSending(false); setTimeout(() => lastSentIdsRef.current.delete(real.id), 10000); }, 3000); }
     } catch (err) { setMsgs(p => p.filter(m => m.id !== tid)); alert("Error: " + String(err)); setSending(false); }
   }
-  function cancelPaste() { if (pastePreview) URL.revokeObjectURL(pastePreview); setPasteFile(null); setPastePreview(null); setPasteCaption(""); setPasteRotation(0); }
+  function cancelPaste() { if (pastePreview) URL.revokeObjectURL(pastePreview); setPasteFile(null); setPastePreview(null); setPasteCaption(""); setPasteRotation(0); setPasteForceType(null); }
 
   /* ═══ EFFECTS (unchanged logic) ═══ */
   useEffect(() => { fetchConvos(); fetchArchived(); fetchLabels(); fetchQuickReplies(); }, [fetchConvos, fetchArchived, fetchLabels, fetchQuickReplies]);
@@ -223,6 +224,7 @@ export default function Dashboard() {
           if (!file) continue;
           setPasteFile(file);
           setPasteCaption("");
+          setPasteForceType(null);
           if (file.type.startsWith("image/")) {
             const url = URL.createObjectURL(file);
             setPastePreview(url);
@@ -666,10 +668,10 @@ export default function Dashboard() {
               <button onClick={e => { e.stopPropagation(); if (showEmoji) closeEmoji(); else { setShowEmoji(true); setShowQuickReplies(false); setQrClosing(false); } }} className={`${s.iconBtn} hidden sm:flex flex-shrink-0`} style={{ color: showEmoji ? "var(--primary)" : "var(--text-3)", background: showEmoji ? "var(--primary-muted)" : "transparent" }}><span className="material-symbols-rounded" style={{ fontSize: 22 }}>mood</span></button>
               <button onClick={e => { e.stopPropagation(); if (showQuickReplies) closeQR(); else { setShowQuickReplies(true); setShowEmoji(false); setEmojiClosing(false); setQrMode("list"); setQrSearch(""); } }} className={`${s.iconBtn} hidden sm:flex flex-shrink-0`} style={{ color: showQuickReplies ? "var(--primary)" : "var(--text-3)", background: showQuickReplies ? "var(--primary-muted)" : "transparent" }}><span className="material-symbols-rounded" style={{ fontSize: 22 }}>bolt</span></button>
               <button onClick={() => document.getElementById("all-file-input")?.click()} className={`${s.iconBtn} hidden sm:flex flex-shrink-0`} style={{ color: "var(--text-3)" }}><span className="material-symbols-rounded" style={{ fontSize: 22 }}>attach_file</span></button>
-              <input id="all-file-input" type="file" className="hidden" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.csv" onChange={e => { const f = e.target.files?.[0]; if (!f || !selId) return; setPasteFile(f); setPasteCaption(""); if (f.type.startsWith("image/") || f.type.startsWith("video/") || f.type.startsWith("audio/")) { setPastePreview(URL.createObjectURL(f)); } else { setPastePreview(null); } e.target.value = ""; }}/>
-              <input id="file-input" type="file" className="hidden" accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.csv" onChange={e => { const f = e.target.files?.[0]; if (!f || !selId) return; setPasteFile(f); setPasteCaption(""); setPastePreview(null); e.target.value = ""; }}/>
-              <input id="gallery-input" type="file" className="hidden" accept="image/*,video/*" onChange={e => { const f = e.target.files?.[0]; if (!f || !selId) return; setPasteFile(f); setPasteCaption(""); setPastePreview(URL.createObjectURL(f)); e.target.value = ""; }}/>
-              <input id="voice-input" type="file" className="hidden" accept="audio/*,.ogg,.opus,.mp3,.m4a,.wav" onChange={e => { const f = e.target.files?.[0]; if (!f || !selId) return; setPasteFile(f); setPasteCaption(""); setPastePreview(URL.createObjectURL(f)); e.target.value = ""; }}/>
+              <input id="all-file-input" type="file" className="hidden" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar,.csv" onChange={e => { const f = e.target.files?.[0]; if (!f || !selId) return; setPasteFile(f); setPasteCaption(""); setPasteForceType(null); if (f.type.startsWith("image/") || f.type.startsWith("video/") || f.type.startsWith("audio/")) { setPastePreview(URL.createObjectURL(f)); } else { setPastePreview(null); } e.target.value = ""; }}/>
+              <input id="file-input" type="file" className="hidden" accept="*/*" onChange={e => { const f = e.target.files?.[0]; if (!f || !selId) return; setPasteFile(f); setPasteCaption(""); setPastePreview(null); setPasteForceType("document"); e.target.value = ""; }}/>
+              <input id="gallery-input" type="file" className="hidden" accept="image/*,video/*" onChange={e => { const f = e.target.files?.[0]; if (!f || !selId) return; setPasteFile(f); setPasteCaption(""); setPastePreview(URL.createObjectURL(f)); setPasteForceType(null); e.target.value = ""; }}/>
+              <input id="voice-input" type="file" className="hidden" accept="audio/*,.ogg,.opus,.mp3,.m4a,.wav" onChange={e => { const f = e.target.files?.[0]; if (!f || !selId) return; setPasteFile(f); setPasteCaption(""); setPastePreview(URL.createObjectURL(f)); setPasteForceType("audio"); e.target.value = ""; }}/>
               <div className="flex-1 min-w-0 rounded-2xl px-3 sm:px-4 py-2 relative cursor-text" onClick={() => inputRef.current?.focus()} style={{ background: "var(--surface-3)", border: `1.5px solid ${inputFocused ? "var(--primary)" : "var(--border)"}`, transition: "border-color 0.2s ease" }}>
                 {slashActive && (() => {
                   const matches = quickReplies.filter(qr => !slashQuery || qr.title.toLowerCase().includes(slashQuery.toLowerCase()));
@@ -886,9 +888,10 @@ export default function Dashboard() {
 
       {/* ▓▓ Media Preview & Send ▓▓ */}
       {pasteFile && (() => {
-        const isImg = pasteFile.type.startsWith("image/");
-        const isVid = pasteFile.type.startsWith("video/");
-        const isAud = pasteFile.type.startsWith("audio/");
+        const isImg = !pasteForceType && pasteFile.type.startsWith("image/");
+        const isVid = !pasteForceType && pasteFile.type.startsWith("video/");
+        const isAud = pasteForceType === "audio" || (!pasteForceType && pasteFile.type.startsWith("audio/"));
+        const isDoc = pasteForceType === "document" || (!isImg && !isVid && !isAud);
         const ext = pasteFile.name.split(".").pop()?.toUpperCase() || "FILE";
         const sizeStr = pasteFile.size > 1048576 ? (pasteFile.size / 1048576).toFixed(1) + " MB" : (pasteFile.size / 1024).toFixed(0) + " KB";
         const iconColor = isImg ? "#10b981" : isVid ? "#8b5cf6" : isAud ? "#f59e0b" : pasteFile.type.includes("pdf") ? "#ef4444" : "#3b82f6";
