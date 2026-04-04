@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { supabase, getSupabase } from "@/lib/supabase";
 
-const GRAPH_API = "https://graph.facebook.com/v25.0";
+const GRAPH_API = "https://graph.facebook.com/v20.0";
 
 export async function POST(
   request: NextRequest,
