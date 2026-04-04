@@ -29,28 +29,31 @@ export async function POST(
 
   try {
     // 1. Upload to Supabase Storage (for dashboard display)
-    const ext = file.name.split(".").pop() || "bin";
-    const storagePath = `media/${Date.now()}_sent.${ext}`;
+    const ext = file.name.split(".").pop()?.toLowerCase() || "bin";
+    const safeName = `${Date.now()}_sent.${ext}`;
+    const storagePath = `media/${safeName}`;
     await sb.storage.createBucket("whatsapp-media", { public: true }).catch(() => {});
     const { error: uploadErr } = await sb.storage.from("whatsapp-media").upload(storagePath, buffer, {
-      contentType: file.type, cacheControl: "31536000", upsert: false,
+      contentType: file.type || "application/octet-stream", cacheControl: "31536000", upsert: false,
     });
     if (uploadErr) return Response.json({ error: "Storage upload failed: " + uploadErr.message }, { status: 500 });
     const publicUrl = sb.storage.from("whatsapp-media").getPublicUrl(storagePath).data.publicUrl;
 
     // 2. Determine WhatsApp message type
-    // Per Meta docs: audio supports aac, amr, mp3(mpeg), m4a(mp4), ogg(opus only)
+    // Detect MIME from extension if file.type is empty (mobile browsers)
+    let mimeType = file.type;
+    if (!mimeType || mimeType === "application/octet-stream") {
+      const mimeMap: Record<string, string> = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp", mp4: "video/mp4", mov: "video/quicktime", avi: "video/x-msvideo", mkv: "video/x-matroska", mp3: "audio/mpeg", ogg: "audio/ogg", m4a: "audio/mp4", wav: "audio/wav", opus: "audio/opus", pdf: "application/pdf", doc: "application/msword", docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" };
+      mimeType = mimeMap[ext] || "application/octet-stream";
+    }
+
     let waType = "document";
-    if (file.type.startsWith("image/")) waType = "image";
-    else if (file.type.startsWith("video/")) waType = "video";
+    if (mimeType.startsWith("image/")) waType = "image";
+    else if (mimeType.startsWith("video/")) waType = "video";
     else if (
-      file.type === "audio/aac" ||
-      file.type === "audio/amr" ||
-      file.type === "audio/mpeg" ||
-      file.type === "audio/mp4" ||
-      file.type === "audio/mp3" ||
-      file.type === "audio/m4a" ||
-      file.type.startsWith("audio/ogg")
+      mimeType === "audio/aac" || mimeType === "audio/amr" || mimeType === "audio/mpeg" ||
+      mimeType === "audio/mp4" || mimeType === "audio/mp3" || mimeType === "audio/m4a" ||
+      mimeType.startsWith("audio/ogg") || mimeType === "audio/opus" || mimeType === "audio/wav"
     ) waType = "audio";
 
     // Override with forceType if provided
@@ -59,11 +62,11 @@ export async function POST(
     console.log(`[SEND-MEDIA] waType: ${waType}, forceType: ${forceType}`);
 
     // 3. Upload file to WhatsApp Media API → get media_id
-    console.log(`[SEND-MEDIA] Uploading to WhatsApp Media API...`);
+    console.log(`[SEND-MEDIA] Uploading to WhatsApp Media API... mime: ${mimeType}`);
     const uploadForm = new FormData();
     uploadForm.append("messaging_product", "whatsapp");
-    uploadForm.append("file", new Blob([arrayBuffer], { type: file.type }), file.name);
-    uploadForm.append("type", file.type);
+    uploadForm.append("file", new Blob([arrayBuffer], { type: mimeType }), safeName);
+    uploadForm.append("type", mimeType);
 
     const uploadRes = await fetch(`${GRAPH_API}/${phoneId}/media`, {
       method: "POST",
@@ -72,16 +75,18 @@ export async function POST(
     });
     const uploadData = await uploadRes.json();
     console.log(`[SEND-MEDIA] Media upload response:`, JSON.stringify(uploadData));
+    const waMediaId = uploadData.id || null;
 
-    let waMediaId = uploadData.id || null;
+    if (!waMediaId) {
+      console.error(`[SEND-MEDIA] Media API upload failed:`, JSON.stringify(uploadData));
+      return Response.json({ error: "WhatsApp media upload failed: " + (uploadData.error?.message || "Unknown error. File may be too large or unsupported format.") }, { status: 400 });
+    }
 
-    // 4. Build WhatsApp message payload (exactly per Meta docs)
+    // 4. Build WhatsApp message payload
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let waPayload: any;
 
-    if (waMediaId) {
-      // Use uploaded media ID
-      if (waType === "audio") {
+    if (waType === "audio") {
         waPayload = {
           messaging_product: "whatsapp",
           recipient_type: "individual",
@@ -114,18 +119,6 @@ export async function POST(
           document: { id: waMediaId, filename: file.name, ...(caption ? { caption } : {}) },
         };
       }
-    } else {
-      // Media upload failed — fallback to public URL as document
-      console.log(`[SEND-MEDIA] Media upload failed, falling back to public URL document`);
-      waType = "document";
-      waPayload = {
-        messaging_product: "whatsapp",
-        recipient_type: "individual",
-        to: convo.phone,
-        type: "document",
-        document: { link: publicUrl, filename: file.name, ...(caption ? { caption } : {}) },
-      };
-    }
 
     console.log(`[SEND-MEDIA] Sending message:`, JSON.stringify(waPayload));
 
@@ -154,7 +147,7 @@ export async function POST(
       content: caption || (isVoice ? "🎵 Voice" : `[${waType}]`),
       message_type: isVoice ? "audio" : waType,
       media_url: publicUrl,
-      media_mime_type: file.type,
+      media_mime_type: mimeType,
       media_filename: file.name,
       media_caption: caption || null,
       whatsapp_msg_id: waMsgId,
