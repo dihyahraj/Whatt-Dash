@@ -332,7 +332,7 @@ export default function Dashboard() {
     switch (msg.message_type) {
       case "image": return <div>{msg.media_url && <img src={msg.media_url} alt="" className="rounded-xl max-w-[260px] max-h-[300px] object-cover cursor-pointer hover:brightness-[0.92] tr" onClick={() => setImgPreview(msg.media_url)}/>}{msg.media_caption && msg.media_caption !== "[image]" && <p className="text-[13px] mt-1.5 whitespace-pre-wrap select-text">{msg.media_caption}</p>}</div>;
       case "video": return <div>{msg.media_url ? <video controls className="rounded-xl max-w-[260px]" preload="metadata"><source src={msg.media_url} type={msg.media_mime_type || "video/mp4"}/></video> : <span className="text-[13px]">🎥 Video</span>}{msg.media_caption && <p className="text-[13px] mt-1.5 select-text">{msg.media_caption}</p>}</div>;
-      case "audio": return msg.media_url ? <VoicePlayer src={msg.media_url} msgId={msg.id}/> : <div className="flex items-center gap-2 text-[13px]" style={{ color: "var(--text-3)" }}><div className="w-3 h-3 rounded-full animate-pulse" style={{ background: "var(--primary)" }}/><span>Sending voice...</span></div>;
+      case "audio": return msg.media_url ? <VoicePlayer src={msg.media_url} msgId={msg.id} time={mt(msg.created_at)} isMe={msg.role === "assistant"} status={msg.status}/> : <div className="flex items-center gap-2 text-[13px]" style={{ color: "var(--text-3)" }}><div className="w-3 h-3 rounded-full animate-pulse" style={{ background: "var(--primary)" }}/><span>Sending voice...</span></div>;
       case "document": return <a href={msg.media_url || "#"} target="_blank" rel="noreferrer" className="flex items-center gap-3 rounded-xl p-3 min-w-[200px] tr" style={{ background: "var(--primary-muted)" }}><div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "var(--primary-muted)" }}><span className="material-symbols-rounded" style={{ fontSize: 20, color: "var(--primary)" }}>description</span></div><div className="flex-1 min-w-0"><p className="text-[13px] font-semibold truncate">{msg.media_filename || "Document"}</p><p className="text-[11px] mt-0.5" style={{ color: "var(--text-3)" }}>{msg.media_mime_type || "File"}</p></div><span className="material-symbols-rounded" style={{ fontSize: 16, color: "var(--text-4)" }}>open_in_new</span></a>;
       case "sticker": return msg.media_url ? <img src={msg.media_url} alt="" className="w-[120px] h-[120px] object-contain"/> : <span className="text-4xl">🏷️</span>;
       case "location": return <a href={`https://maps.google.com/?q=${msg.latitude},${msg.longitude}`} target="_blank" rel="noreferrer" className="block rounded-xl p-3 min-w-[180px] tr" style={{ background: "var(--primary-muted)" }}><p className="text-[13px] font-semibold">📍 {msg.location_name || "Location"}</p>{msg.location_address && <p className="text-[11px] mt-0.5" style={{ color: "var(--text-3)" }}>{msg.location_address}</p>}<p className="text-[11px] mt-1 font-medium" style={{ color: "var(--primary)" }}>Open in Maps →</p></a>;
@@ -583,7 +583,7 @@ export default function Dashboard() {
                     <div className={`relative px-3 py-[7px] ${msg.message_type === "sticker" ? "" : replied ? "rounded-b-2xl" : "rounded-2xl"}`} style={msg.message_type === "sticker" ? {} : { background: isMe ? "var(--bubble-me)" : "var(--bubble-them)", color: isMe ? "var(--bubble-me-text)" : "var(--bubble-them-text)", boxShadow: "var(--shadow-sm)", ...(isMe && !replied ? { borderTopRightRadius: "6px" } : !isMe && !replied ? { borderTopLeftRadius: "6px" } : {}) }}>
                       {!msg.is_deleted && <div className="absolute right-0 top-0 opacity-0 group-hover/m:opacity-100 z-10"><button onMouseDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); const rect = e.currentTarget.getBoundingClientRect(); setMsgMenuPos(msgMenuId === msg.id ? null : { x: isMe ? rect.right : rect.left, y: rect.bottom + 4, isMe }); setMsgMenuId(msgMenuId === msg.id ? null : msg.id); setChatMenuId(null); setHeaderMenu(false); }} className="w-7 h-7 rounded-bl-xl flex items-center justify-center" style={{ background: isMe ? "var(--bubble-me)" : "var(--bubble-them)" }}><span className="material-symbols-rounded" style={{ fontSize: 16, color: "var(--text-3)" }}>expand_more</span></button></div>}
                       {media(msg)}
-                      <div className="flex items-center justify-end gap-0.5 mt-0.5">{msg.is_starred && <span className="material-symbols-rounded" style={{ fontSize: 12, color: "#eab308", fontVariationSettings: "'FILL' 1" }}>star</span>}<span className="text-[10px]" style={{ color: isMe ? "var(--bubble-me-meta)" : "var(--text-4)" }}>{mt(msg.created_at)}</span>{isMe && si(msg.status || "sent")}</div>
+                      {msg.message_type !== "audio" && <div className="flex items-center justify-end gap-0.5 mt-0.5">{msg.is_starred && <span className="material-symbols-rounded" style={{ fontSize: 12, color: "#eab308", fontVariationSettings: "'FILL' 1" }}>star</span>}<span className="text-[10px]" style={{ color: isMe ? "var(--bubble-me-meta)" : "var(--text-4)" }}>{mt(msg.created_at)}</span>{isMe && si(msg.status || "sent")}</div>}
                     </div>
                     {msg.reaction && <div className="absolute -bottom-3 rounded-full px-1.5 py-0.5 text-[12px] cursor-pointer hover:scale-110 tr" style={{ ...(isMe ? { right: 8 } : { left: 8 }), background: "var(--surface-1)", boxShadow: "var(--shadow-md)", border: "1px solid var(--border)" }} onClick={e => { e.stopPropagation(); reactMsg(msg.id, msg.reaction!); }}>{msg.reaction}</div>}
                     {reactPickerId === msg.id && <div data-menu className={`absolute ${isMe ? "right-0" : "left-0"} -top-12 z-[100] rounded-full px-2 py-1.5 flex gap-0.5 anim-scale-in`} style={{ background: "var(--surface-1)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)" }} onClick={e => e.stopPropagation()}>{QUICK_REACT.map(e => <button key={e} onClick={() => reactMsg(msg.id, e)} className="text-[18px] hover:scale-125 tr w-8 h-8 rounded-full flex items-center justify-center hover:bg-[var(--primary-muted)]">{e}</button>)}</div>}
@@ -973,7 +973,7 @@ function MI({ i, l, o, d }: { i: string; l: string; o: () => void; d?: boolean }
 }
 
 /* ═══ VOICE PLAYER ═══ */
-function VoicePlayer({ src, msgId }: { src: string; msgId: string }) {
+function VoicePlayer({ src, msgId, time, isMe, status }: { src: string; msgId: string; time?: string; isMe?: boolean; status?: string | null }) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [playing, setPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -1019,7 +1019,15 @@ function VoicePlayer({ src, msgId }: { src: string; msgId: string }) {
             return <div key={i} className="rounded-full" style={{ width: 3, height: `${h * 100}%`, minHeight: 4, background: filled ? "var(--primary)" : "var(--text-4)", opacity: filled ? 1 : 0.3, transition: "background 0.15s, opacity 0.15s" }}/>;
           })}
         </div>
-        <span className="text-[10px] font-semibold mt-1 tabular-nums" style={{ color: playing ? "var(--primary)" : "var(--text-3)" }}>{playing || currentTime > 0 ? fmt(currentTime) : fmt(duration)}</span>
+        <div className="flex items-center justify-between mt-1">
+          <span className="text-[10px] font-semibold tabular-nums" style={{ color: playing ? "var(--primary)" : "var(--text-3)" }}>{playing || currentTime > 0 ? fmt(currentTime) : fmt(duration)}</span>
+          {time && <div className="flex items-center gap-0.5">
+            <span className="text-[10px]" style={{ color: isMe ? "var(--bubble-me-meta)" : "var(--text-4)" }}>{time}</span>
+            {isMe && status === "sent" && <span className="material-symbols-rounded" style={{ fontSize: 14, color: "var(--bubble-me-meta)" }}>check</span>}
+            {isMe && status === "delivered" && <span className="material-symbols-rounded" style={{ fontSize: 14, color: "var(--bubble-me-meta)" }}>done_all</span>}
+            {isMe && status === "read" && <span className="material-symbols-rounded" style={{ fontSize: 14, color: "#53bdeb" }}>done_all</span>}
+          </div>}
+        </div>
       </div>
     </div>
   );
