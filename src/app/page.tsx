@@ -101,6 +101,7 @@ export default function Dashboard() {
   const [slashActive, setSlashActive] = useState(false);
   const [slashQuery, setSlashQuery] = useState("");
   const [slashIdx, setSlashIdx] = useState(0);
+  const [inputFocused, setInputFocused] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [msgMenuPos, setMsgMenuPos] = useState<{x: number; y: number; isMe: boolean} | null>(null);
   const [sidebarMenu, setSidebarMenu] = useState(false);
@@ -543,7 +544,7 @@ export default function Dashboard() {
               <button onClick={e => { e.stopPropagation(); if (showQuickReplies) closeQR(); else { setShowQuickReplies(true); setShowEmoji(false); setEmojiClosing(false); setQrMode("list"); setQrSearch(""); } }} className={s.iconBtn} style={{ color: showQuickReplies ? "var(--primary)" : "var(--text-3)", background: showQuickReplies ? "var(--primary-muted)" : "transparent" }} title="Quick Replies"><span className="material-symbols-rounded" style={{ fontSize: 22 }}>bolt</span></button>
               <button onClick={() => document.getElementById("file-input")?.click()} className={s.iconBtn} style={{ color: "var(--text-3)" }} title="Attach"><span className="material-symbols-rounded" style={{ fontSize: 22 }}>attach_file</span></button>
               <input id="file-input" type="file" className="hidden" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar" onChange={async e => { const f = e.target.files?.[0]; if (!f || !selId) return; const ic = f.type.startsWith("image/") ? "📷" : f.type.startsWith("video/") ? "🎥" : "📄"; const tid = `temp_file_${Date.now()}`; addOptimisticMsg(tid, `${ic} Sending ${f.name}...`, f.type.startsWith("image/") ? "image" : "document"); setSending(true); try { const fd = new FormData(); fd.append("file", f); fd.append("caption", ""); const res = await fetch(`/api/conversations/${selId}/send-media`, { method: "POST", body: fd }); if (!res.ok) { setMsgs(p => p.filter(m => m.id !== tid)); const d = await res.json(); alert("Error: " + JSON.stringify(d)); setSending(false); } else { const real = await res.json(); lastSentIdsRef.current.add(real.id); setMsgs(p => p.map(m => m.id === tid ? { ...real } : m)); setTimeout(() => { setSending(false); setTimeout(() => lastSentIdsRef.current.delete(real.id), 10000); }, 3000); } } catch (err) { setMsgs(p => p.filter(m => m.id !== tid)); alert("Error: " + String(err)); setSending(false); } finally { e.target.value = ""; } }}/>
-              <div className="flex-1 rounded-2xl px-4 py-2.5 tr relative" style={{ background: "var(--surface-3)", border: "1.5px solid transparent" }}>
+              <div className="flex-1 rounded-2xl px-4 py-2.5 relative cursor-text" onClick={() => inputRef.current?.focus()} style={{ background: "var(--surface-3)", border: `1.5px solid ${inputFocused ? "var(--primary)" : "var(--border)"}`, transition: "border-color 0.2s ease" }}>
                 {slashActive && (() => {
                   const matches = quickReplies.filter(qr => !slashQuery || qr.title.toLowerCase().includes(slashQuery.toLowerCase()));
                   if (matches.length === 0) return null;
@@ -561,10 +562,9 @@ export default function Dashboard() {
                     </div>
                   </div>;
                 })()}
-                <textarea ref={inputRef} value={input} onChange={e => {
+                <textarea ref={inputRef} value={input} onFocus={() => setInputFocused(true)} onBlur={() => setInputFocused(false)} onChange={e => {
                   const v = e.target.value; setInput(v);
                   e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
-                  // Slash command detection
                   if (v.startsWith("/")) { setSlashActive(true); setSlashQuery(v.slice(1)); setSlashIdx(0); }
                   else { setSlashActive(false); setSlashQuery(""); }
                 }} onKeyDown={e => {
@@ -577,7 +577,7 @@ export default function Dashboard() {
                     return;
                   }
                   if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
-                }} placeholder="Type a message or / for quick replies" rows={1} className="w-full bg-transparent text-[14px] focus:outline-none resize-none leading-[1.45] max-h-[120px] overflow-y-auto" style={{ color: "var(--text-1)", height: "auto" }}/>
+                }} placeholder="Type or / for quick replies" rows={1} className="w-full bg-transparent text-[14px] focus:outline-none resize-none leading-[1.5] max-h-[120px] overflow-y-auto" style={{ color: "var(--text-1)", height: "auto", transition: "height 0.15s ease" }}/>
               </div>
               <button onClick={handleSend} disabled={sending || !input.trim()} className="w-10 h-10 rounded-xl disabled:opacity-20 tr flex items-center justify-center flex-shrink-0 shadow-sm hover:shadow-md" style={{ background: "var(--primary)" }}>
                 {sending ? <span className="material-symbols-rounded animate-spin" style={{ fontSize: 20, color: "var(--primary-text)" }}>progress_activity</span>
