@@ -496,7 +496,7 @@ export default function Dashboard() {
                   <button onClick={() => setEmojiCat("recent")} className="w-9 h-9 rounded-lg flex-shrink-0 flex items-center justify-center tr" style={{ background: emojiCat === "recent" ? "var(--primary-muted)" : "transparent" }}><span className="material-symbols-rounded" style={{ fontSize: 18, color: emojiCat === "recent" ? "var(--primary)" : "var(--text-3)" }}>schedule</span></button>
                   {Object.keys(EMOJIS).map(c => <button key={c} onClick={() => setEmojiCat(c)} className="text-[18px] w-9 h-9 rounded-lg flex-shrink-0 flex items-center justify-center tr" style={{ background: emojiCat === c ? "var(--primary-muted)" : "transparent" }}>{c}</button>)}
                 </div>
-                <div className="p-2.5 overflow-y-auto" style={{ maxHeight: 220 }}>
+                <div className="p-2.5 overflow-y-auto" style={{ height: 220 }}>
                   {emojiCat === "recent" ? (
                     recentEmojis.length === 0 ? <p className="text-center py-6 text-[12px]" style={{ color: "var(--text-4)" }}>No recent emojis yet</p> :
                     <div className="flex flex-wrap gap-0.5">{recentEmojis.map((em, i) => <button key={i} onClick={() => { addRecentEmoji(em); setInput(p => p + em); closeEmoji(); inputRef.current?.focus(); }} className="w-10 h-10 text-[22px] rounded-lg flex items-center justify-center tr hover:bg-[var(--primary-muted)] hover:scale-110">{em}</button>)}</div>
@@ -537,32 +537,30 @@ export default function Dashboard() {
               </div>
             </>}
 
-            {/* ▓▓ Slash Command Popup ▓▓ */}
-            {slashActive && (() => {
-              const matches = quickReplies.filter(qr => !slashQuery || qr.title.toLowerCase().includes(slashQuery.toLowerCase()));
-              if (matches.length === 0) return null;
-              return <div className="absolute bottom-full mb-2 left-3 right-3 sm:left-auto sm:right-16 z-[52] rounded-xl overflow-hidden anim-popup" style={{ background: "var(--surface-1)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)", maxWidth: 360, transformOrigin: "bottom center" }} onClick={e => e.stopPropagation()}>
-                  <div className="px-3 py-2 flex items-center gap-2" style={{ borderBottom: "1px solid var(--border)" }}>
-                    <span className="text-[12px] font-bold px-1.5 py-0.5 rounded" style={{ background: "var(--primary-muted)", color: "var(--primary)" }}>/</span>
-                    <span className="text-[12px] font-medium" style={{ color: "var(--text-3)" }}>Quick reply search</span>
-                    <span className="text-[10px] ml-auto hidden sm:block" style={{ color: "var(--text-4)" }}>↑↓ Enter</span>
-                  </div>
-                  <div className="overflow-y-auto" style={{ maxHeight: 200 }}>
-                    {matches.map((qr, i) => <button key={qr.id} onClick={() => { selectSlashQR(qr); }} className="w-full flex items-start gap-2 px-3 py-2.5 text-left tr" style={{ background: i === slashIdx ? "var(--primary-muted)" : "transparent" }}>
-                      <span className="text-[12px] font-bold" style={{ color: "var(--primary)" }}>{qr.title}</span>
-                      <span className="text-[11px] truncate flex-1" style={{ color: "var(--text-3)" }}>{qr.content.slice(0, 60)}</span>
-                    </button>)}
-                  </div>
-                </div>;
-            })()}
-
             {/* Input Bar */}
             <div className="px-3 sm:px-10 lg:px-16 py-2.5 sm:py-3 flex items-end gap-1.5 sm:gap-2">
               <button onClick={e => { e.stopPropagation(); if (showEmoji) closeEmoji(); else { setShowEmoji(true); setShowQuickReplies(false); setQrClosing(false); } }} className={`${s.iconBtn} hidden sm:flex`} style={{ color: showEmoji ? "var(--primary)" : "var(--text-3)", background: showEmoji ? "var(--primary-muted)" : "transparent" }}><span className="material-symbols-rounded" style={{ fontSize: 22 }}>mood</span></button>
               <button onClick={e => { e.stopPropagation(); if (showQuickReplies) closeQR(); else { setShowQuickReplies(true); setShowEmoji(false); setEmojiClosing(false); setQrMode("list"); setQrSearch(""); } }} className={s.iconBtn} style={{ color: showQuickReplies ? "var(--primary)" : "var(--text-3)", background: showQuickReplies ? "var(--primary-muted)" : "transparent" }} title="Quick Replies"><span className="material-symbols-rounded" style={{ fontSize: 22 }}>bolt</span></button>
               <button onClick={() => document.getElementById("file-input")?.click()} className={s.iconBtn} style={{ color: "var(--text-3)" }} title="Attach"><span className="material-symbols-rounded" style={{ fontSize: 22 }}>attach_file</span></button>
               <input id="file-input" type="file" className="hidden" accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip,.rar" onChange={async e => { const f = e.target.files?.[0]; if (!f || !selId) return; const ic = f.type.startsWith("image/") ? "📷" : f.type.startsWith("video/") ? "🎥" : "📄"; const tid = `temp_file_${Date.now()}`; addOptimisticMsg(tid, `${ic} Sending ${f.name}...`, f.type.startsWith("image/") ? "image" : "document"); setSending(true); try { const fd = new FormData(); fd.append("file", f); fd.append("caption", ""); const res = await fetch(`/api/conversations/${selId}/send-media`, { method: "POST", body: fd }); if (!res.ok) { setMsgs(p => p.filter(m => m.id !== tid)); const d = await res.json(); alert("Error: " + JSON.stringify(d)); setSending(false); } else { const real = await res.json(); lastSentIdsRef.current.add(real.id); setMsgs(p => p.map(m => m.id === tid ? { ...real } : m)); setTimeout(() => { setSending(false); setTimeout(() => lastSentIdsRef.current.delete(real.id), 10000); }, 3000); } } catch (err) { setMsgs(p => p.filter(m => m.id !== tid)); alert("Error: " + String(err)); setSending(false); } finally { e.target.value = ""; } }}/>
-              <div className="flex-1 rounded-2xl px-4 py-2.5 tr" style={{ background: "var(--surface-3)", border: "1.5px solid transparent" }}>
+              <div className="flex-1 rounded-2xl px-4 py-2.5 tr relative" style={{ background: "var(--surface-3)", border: "1.5px solid transparent" }}>
+                {slashActive && (() => {
+                  const matches = quickReplies.filter(qr => !slashQuery || qr.title.toLowerCase().includes(slashQuery.toLowerCase()));
+                  if (matches.length === 0) return null;
+                  return <div className="absolute bottom-full mb-2 left-0 right-0 z-[52] rounded-xl overflow-hidden anim-scale-in" style={{ background: "var(--surface-1)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)" }}>
+                    <div className="px-3 py-2 flex items-center gap-2" style={{ borderBottom: "1px solid var(--border)" }}>
+                      <span className="text-[12px] font-bold px-1.5 py-0.5 rounded" style={{ background: "var(--primary-muted)", color: "var(--primary)" }}>/</span>
+                      <span className="text-[12px] font-medium" style={{ color: "var(--text-3)" }}>Quick replies</span>
+                      <span className="text-[10px] ml-auto hidden sm:block" style={{ color: "var(--text-4)" }}>↑↓ Enter</span>
+                    </div>
+                    <div className="overflow-y-auto" style={{ maxHeight: 200 }}>
+                      {matches.map((qr, i) => <button key={qr.id} onClick={() => selectSlashQR(qr)} className="w-full flex items-start gap-2 px-3 py-2.5 text-left tr" style={{ background: i === slashIdx ? "var(--primary-muted)" : "transparent" }}>
+                        <span className="text-[12px] font-bold flex-shrink-0" style={{ color: "var(--primary)" }}>{qr.title}</span>
+                        <span className="text-[11px] truncate flex-1" style={{ color: "var(--text-3)" }}>{qr.content.slice(0, 50)}</span>
+                      </button>)}
+                    </div>
+                  </div>;
+                })()}
                 <textarea ref={inputRef} value={input} onChange={e => {
                   const v = e.target.value; setInput(v);
                   e.target.style.height = "auto"; e.target.style.height = Math.min(e.target.scrollHeight, 120) + "px";
