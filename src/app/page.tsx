@@ -879,65 +879,47 @@ export default function Dashboard() {
       {pasteFile && (() => {
         const isImg = pasteFile.type.startsWith("image/");
         const isVid = pasteFile.type.startsWith("video/");
-        const isAud = pasteFile.type.startsWith("audio/");
         const ext = pasteFile.name.split(".").pop()?.toUpperCase() || "FILE";
         const sizeStr = pasteFile.size > 1048576 ? (pasteFile.size / 1048576).toFixed(1) + " MB" : (pasteFile.size / 1024).toFixed(0) + " KB";
-        const icon = isImg ? "image" : isVid ? "videocam" : isAud ? "audio_file" : pasteFile.type.includes("pdf") ? "picture_as_pdf" : pasteFile.type.includes("sheet") || pasteFile.type.includes("excel") || ext === "XLSX" || ext === "CSV" ? "table_chart" : pasteFile.type.includes("word") || pasteFile.type.includes("document") || ext === "DOCX" || ext === "DOC" ? "article" : "description";
-        const iconColor = isImg ? "#10b981" : isVid ? "#8b5cf6" : isAud ? "#f59e0b" : pasteFile.type.includes("pdf") ? "#ef4444" : "#3b82f6";
-        return <div className="fixed inset-0 z-[250] flex items-center justify-center p-3 sm:p-6" style={{ background: "rgba(0,0,0,0.8)", backdropFilter: "blur(12px)" }} onClick={cancelPaste}>
-          <div className="w-full max-w-[480px] rounded-3xl overflow-hidden anim-scale-in flex flex-col" style={{ background: "var(--surface-1)", boxShadow: "0 32px 100px rgba(0,0,0,0.6)", maxHeight: "88vh" }} onClick={e => e.stopPropagation()}>
+        const iconColor = isImg ? "#10b981" : isVid ? "#8b5cf6" : pasteFile.type.includes("pdf") ? "#ef4444" : "#3b82f6";
+        const icon = isImg ? "image" : isVid ? "videocam" : pasteFile.type.includes("pdf") ? "picture_as_pdf" : "description";
+        return <div className="fixed inset-0 z-[250] flex items-center justify-center" style={{ background: "rgba(0,0,0,0.85)" }} onClick={cancelPaste}>
+          <div className="flex flex-col m-4 sm:m-8 rounded-3xl overflow-hidden anim-scale-in" style={{ background: "var(--surface-1)", maxWidth: 460, width: "100%", maxHeight: "calc(100vh - 64px)" }} onClick={e => e.stopPropagation()}>
 
-            {/* Gradient accent line */}
-            <div className="h-1 flex-shrink-0" style={{ background: `linear-gradient(90deg, ${iconColor}, ${iconColor}80, transparent)` }}/>
+            {/* Top bar — close + info */}
+            <div className="flex items-center gap-3 px-4 py-2.5 flex-shrink-0" style={{ background: "var(--surface-2)" }}>
+              <button onClick={cancelPaste} className="w-9 h-9 rounded-xl flex items-center justify-center tr hover:bg-[var(--surface-3)]" style={{ color: "var(--text-2)" }}><span className="material-symbols-rounded" style={{ fontSize: 20 }}>close</span></button>
+              <span className="material-symbols-rounded" style={{ fontSize: 18, color: iconColor }}>{icon}</span>
+              <span className="text-[12px] font-medium truncate flex-1" style={{ color: "var(--text-2)" }}>{pasteFile.name}</span>
+              <span className="text-[10px] px-2 py-0.5 rounded-md font-bold flex-shrink-0" style={{ background: `${iconColor}15`, color: iconColor }}>{ext} · {sizeStr}</span>
+              {isImg && <>
+                <button onClick={() => setPasteRotation(r => (r - 90) % 360)} className="w-8 h-8 rounded-lg flex items-center justify-center tr hover:bg-[var(--surface-3)]" style={{ color: "var(--text-3)" }}><span className="material-symbols-rounded" style={{ fontSize: 18 }}>rotate_left</span></button>
+                <button onClick={() => setPasteRotation(r => (r + 90) % 360)} className="w-8 h-8 rounded-lg flex items-center justify-center tr hover:bg-[var(--surface-3)]" style={{ color: "var(--text-3)" }}><span className="material-symbols-rounded" style={{ fontSize: 18 }}>rotate_right</span></button>
+              </>}
+            </div>
 
-            {/* Preview area */}
-            <div className="flex-1 min-h-0 overflow-auto">
+            {/* Preview — contained */}
+            <div className="flex-1 min-h-0 flex items-center justify-center overflow-hidden p-3" style={{ background: "var(--surface-3)" }}>
               {isImg && pastePreview ? (
-                <div className="flex flex-col" style={{ background: "var(--surface-3)" }}>
-                  {/* Image toolbar */}
-                  <div className="flex items-center justify-center gap-1 px-3 py-2" style={{ borderBottom: "1px solid var(--border)" }}>
-                    <button onClick={() => setPasteRotation(r => (r - 90) % 360)} className="w-9 h-9 rounded-xl flex items-center justify-center tr hover:bg-[var(--surface-1)]" style={{ color: "var(--text-3)" }} title="Rotate left"><span className="material-symbols-rounded" style={{ fontSize: 20 }}>rotate_left</span></button>
-                    <button onClick={() => setPasteRotation(r => (r + 90) % 360)} className="w-9 h-9 rounded-xl flex items-center justify-center tr hover:bg-[var(--surface-1)]" style={{ color: "var(--text-3)" }} title="Rotate right"><span className="material-symbols-rounded" style={{ fontSize: 20 }}>rotate_right</span></button>
-                  </div>
-                  {/* Image */}
-                  <div className="p-4 flex items-center justify-center" style={{ minHeight: 200 }}>
-                    <img src={pastePreview} alt="Preview" className="max-w-full max-h-[48vh] object-contain rounded-xl tr" style={{ transform: `rotate(${pasteRotation}deg)` }}/>
-                  </div>
-                </div>
+                <img src={pastePreview} alt="" className="max-w-full max-h-full object-contain rounded-lg tr" style={{ transform: `rotate(${pasteRotation}deg)` }}/>
               ) : isVid && pastePreview ? (
-                <div className="p-4 flex items-center justify-center" style={{ background: "#000", minHeight: 200 }}>
-                  <video src={pastePreview} controls className="max-w-full max-h-[52vh] rounded-xl" style={{ outline: "none" }}/>
-                </div>
+                <video src={pastePreview} controls className="max-w-full max-h-full rounded-lg"/>
               ) : (
-                <div className="px-6 py-10 flex flex-col items-center gap-4" style={{ background: "var(--surface-3)" }}>
-                  <div className="w-20 h-20 rounded-2xl flex items-center justify-center" style={{ background: `${iconColor}18` }}>
-                    <span className="material-symbols-rounded" style={{ fontSize: 40, color: iconColor }}>{icon}</span>
+                <div className="flex flex-col items-center gap-3 py-6">
+                  <div className="w-16 h-16 rounded-2xl flex items-center justify-center" style={{ background: `${iconColor}15` }}>
+                    <span className="material-symbols-rounded" style={{ fontSize: 36, color: iconColor }}>{icon}</span>
                   </div>
-                  <div className="text-center">
-                    <p className="text-[14px] font-bold truncate max-w-[300px]" style={{ color: "var(--text-1)" }}>{pasteFile.name}</p>
-                    <div className="flex items-center justify-center gap-2 mt-1.5">
-                      <span className="text-[11px] px-2 py-0.5 rounded-md font-bold" style={{ background: `${iconColor}20`, color: iconColor }}>{ext}</span>
-                      <span className="text-[11px]" style={{ color: "var(--text-4)" }}>·</span>
-                      <span className="text-[11px] font-medium" style={{ color: "var(--text-3)" }}>{sizeStr}</span>
-                    </div>
-                  </div>
+                  <p className="text-[13px] font-bold" style={{ color: "var(--text-1)" }}>{pasteFile.name}</p>
                 </div>
               )}
             </div>
 
-            {/* File info bar (for images/videos) */}
-            {(isImg || isVid) && <div className="px-4 py-2 flex items-center gap-2 flex-shrink-0" style={{ borderTop: "1px solid var(--border)" }}>
-              <span className="material-symbols-rounded" style={{ fontSize: 16, color: iconColor }}>{icon}</span>
-              <span className="text-[11px] font-medium truncate flex-1" style={{ color: "var(--text-3)" }}>{pasteFile.name}</span>
-              <span className="text-[10px] px-2 py-0.5 rounded-md font-bold" style={{ background: "var(--surface-3)", color: "var(--text-4)" }}>{sizeStr}</span>
-            </div>}
-
             {/* Caption + Send */}
-            <div className="flex items-center gap-2.5 px-4 py-3 flex-shrink-0" style={{ background: "var(--surface-2)", borderTop: "1px solid var(--border)" }}>
-              <div className="flex-1 rounded-xl px-3.5 py-2.5 tr" style={{ background: "var(--surface-3)", border: "1.5px solid var(--border)" }}>
+            <div className="flex items-center gap-2 px-3 py-2.5 flex-shrink-0" style={{ background: "var(--surface-2)" }}>
+              <div className="flex-1 rounded-xl px-3 py-2" style={{ background: "var(--surface-3)", border: "1px solid var(--border)" }}>
                 <input type="text" value={pasteCaption} onChange={e => setPasteCaption(e.target.value)} onKeyDown={e => { if (e.key === "Enter") sendPasteFile(); if (e.key === "Escape") cancelPaste(); }} placeholder="Add a caption..." autoFocus className="w-full bg-transparent text-[13px] focus:outline-none" style={{ color: "var(--text-1)" }}/>
               </div>
-              <button onClick={sendPasteFile} className="w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 tr shadow-md hover:shadow-lg" style={{ background: "var(--primary)" }}>
+              <button onClick={sendPasteFile} className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 tr" style={{ background: "var(--primary)" }}>
                 <span className="material-symbols-rounded" style={{ fontSize: 20, color: "var(--primary-text)", fontVariationSettings: "'FILL' 1" }}>send</span>
               </button>
             </div>
