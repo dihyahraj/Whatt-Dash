@@ -330,7 +330,7 @@ export default function Dashboard() {
     switch (msg.message_type) {
       case "image": return <div>{msg.media_url && <img src={msg.media_url} alt="" className="rounded-xl max-w-[260px] max-h-[300px] object-cover cursor-pointer hover:brightness-[0.92] tr" onClick={() => setImgPreview(msg.media_url)}/>}{msg.media_caption && msg.media_caption !== "[image]" && <p className="text-[13px] mt-1.5 whitespace-pre-wrap select-text">{msg.media_caption}</p>}</div>;
       case "video": return <div>{msg.media_url ? <video controls className="rounded-xl max-w-[260px]" preload="metadata"><source src={msg.media_url} type={msg.media_mime_type || "video/mp4"}/></video> : <span className="text-[13px]">🎥 Video</span>}{msg.media_caption && <p className="text-[13px] mt-1.5 select-text">{msg.media_caption}</p>}</div>;
-      case "audio": return msg.media_url ? <audio controls className="max-w-[240px]" preload="metadata"><source src={msg.media_url} type={msg.media_mime_type || "audio/ogg"}/></audio> : <div className="flex items-center gap-2 text-[13px]" style={{ color: "var(--text-3)" }}><div className="w-3 h-3 rounded-full animate-pulse" style={{ background: "var(--primary)" }}/><span>Sending voice...</span></div>;
+      case "audio": return msg.media_url ? <VoicePlayer src={msg.media_url} msgId={msg.id}/> : <div className="flex items-center gap-2 text-[13px]" style={{ color: "var(--text-3)" }}><div className="w-3 h-3 rounded-full animate-pulse" style={{ background: "var(--primary)" }}/><span>Sending voice...</span></div>;
       case "document": return <a href={msg.media_url || "#"} target="_blank" rel="noreferrer" className="flex items-center gap-3 rounded-xl p-3 min-w-[200px] tr" style={{ background: "var(--primary-muted)" }}><div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "var(--primary-muted)" }}><span className="material-symbols-rounded" style={{ fontSize: 20, color: "var(--primary)" }}>description</span></div><div className="flex-1 min-w-0"><p className="text-[13px] font-semibold truncate">{msg.media_filename || "Document"}</p><p className="text-[11px] mt-0.5" style={{ color: "var(--text-3)" }}>{msg.media_mime_type || "File"}</p></div><span className="material-symbols-rounded" style={{ fontSize: 16, color: "var(--text-4)" }}>open_in_new</span></a>;
       case "sticker": return msg.media_url ? <img src={msg.media_url} alt="" className="w-[120px] h-[120px] object-contain"/> : <span className="text-4xl">🏷️</span>;
       case "location": return <a href={`https://maps.google.com/?q=${msg.latitude},${msg.longitude}`} target="_blank" rel="noreferrer" className="block rounded-xl p-3 min-w-[180px] tr" style={{ background: "var(--primary-muted)" }}><p className="text-[13px] font-semibold">📍 {msg.location_name || "Location"}</p>{msg.location_address && <p className="text-[11px] mt-0.5" style={{ color: "var(--text-3)" }}>{msg.location_address}</p>}<p className="text-[11px] mt-1 font-medium" style={{ color: "var(--primary)" }}>Open in Maps →</p></a>;
@@ -967,4 +967,59 @@ export default function Dashboard() {
 /* ═══ MENU ITEM ═══ */
 function MI({ i, l, o, d }: { i: string; l: string; o: () => void; d?: boolean }) {
   return <button onClick={o} className="w-full flex items-center gap-3 px-4 py-2.5 text-[13px] tr" style={{ color: d ? "var(--danger)" : "var(--text-1)" }} onMouseEnter={e => e.currentTarget.style.background = d ? "var(--danger-muted)" : "var(--primary-muted)"} onMouseLeave={e => e.currentTarget.style.background = "transparent"}><span className="material-symbols-rounded" style={{ fontSize: 18 }}>{i}</span><span className="font-medium">{l}</span></button>;
+}
+
+/* ═══ VOICE PLAYER ═══ */
+function VoicePlayer({ src, msgId }: { src: string; msgId: string }) {
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const [playing, setPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrent] = useState(0);
+  // Generate stable waveform bars from msgId
+  const bars = useMemo(() => {
+    const b: number[] = [];
+    let seed = 0;
+    for (let i = 0; i < msgId.length; i++) seed = ((seed << 5) - seed + msgId.charCodeAt(i)) | 0;
+    for (let i = 0; i < 40; i++) { seed = (seed * 16807 + 12345) & 0x7fffffff; b.push(0.15 + (seed % 100) / 100 * 0.85); }
+    return b;
+  }, [msgId]);
+
+  useEffect(() => {
+    const a = audioRef.current; if (!a) return;
+    const onTime = () => { setCurrent(a.currentTime); setProgress(a.duration ? a.currentTime / a.duration : 0); };
+    const onMeta = () => setDuration(a.duration || 0);
+    const onEnd = () => { setPlaying(false); setProgress(0); setCurrent(0); };
+    a.addEventListener("timeupdate", onTime);
+    a.addEventListener("loadedmetadata", onMeta);
+    a.addEventListener("ended", onEnd);
+    return () => { a.removeEventListener("timeupdate", onTime); a.removeEventListener("loadedmetadata", onMeta); a.removeEventListener("ended", onEnd); };
+  }, []);
+
+  function toggle() { const a = audioRef.current; if (!a) return; if (playing) a.pause(); else a.play().catch(() => {}); setPlaying(!playing); }
+  function seek(e: React.MouseEvent<HTMLDivElement>) { const a = audioRef.current; if (!a || !a.duration) return; const r = e.currentTarget.getBoundingClientRect(); const p = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)); a.currentTime = p * a.duration; setProgress(p); }
+  const fmt = (s: number) => { if (!s || !isFinite(s)) return "0:00"; const m = Math.floor(s / 60); return `${m}:${String(Math.floor(s % 60)).padStart(2, "0")}`; };
+
+  return (
+    <div className="flex items-center gap-2.5 min-w-[220px] sm:min-w-[260px]">
+      <audio ref={audioRef} src={src} preload="metadata"/>
+      <button onClick={toggle} className="w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 tr" style={{ background: "var(--primary)" }}>
+        <span className="material-symbols-rounded" style={{ fontSize: 20, color: "var(--primary-text)", fontVariationSettings: "'FILL' 1" }}>{playing ? "pause" : "play_arrow"}</span>
+      </button>
+      <div className="flex-1 flex flex-col gap-1">
+        {/* Waveform */}
+        <div className="flex items-end gap-[2px] h-[28px] cursor-pointer" onClick={seek}>
+          {bars.map((h, i) => {
+            const filled = i / bars.length <= progress;
+            return <div key={i} className="flex-1 rounded-full tr" style={{ height: `${h * 100}%`, minWidth: 2, background: filled ? "var(--primary)" : "var(--text-4)", opacity: filled ? 1 : 0.35, transition: "background 0.1s, opacity 0.1s" }}/>;
+          })}
+        </div>
+        {/* Time */}
+        <div className="flex justify-between">
+          <span className="text-[10px] font-medium tabular-nums" style={{ color: "var(--text-3)" }}>{fmt(currentTime)}</span>
+          <span className="text-[10px] font-medium tabular-nums" style={{ color: "var(--text-4)" }}>{fmt(duration)}</span>
+        </div>
+      </div>
+    </div>
+  );
 }
