@@ -344,7 +344,7 @@ export default function Dashboard() {
   /* ═══ CONTEXT MENU ═══ */
   function ChatCtx({ convo, onClose }: { convo: ConversationWithLastMessage; onClose: () => void }) {
     const lo = chatLabelOpen === convo.id;
-    return <div data-menu className={`rounded-2xl py-1 min-w-[200px] overflow-hidden ${anim-menu}`} style={{ background: "var(--surface-2)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)", backdropFilter: "blur(16px)", position: "absolute", right: 0, top: "100%", marginTop: 4, zIndex: 100 }} onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()}>
+    return <div data-menu className="rounded-2xl py-1 min-w-[200px] overflow-hidden anim-menu" style={{ background: "var(--surface-2)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)", backdropFilter: "blur(16px)", position: "absolute", right: 0, top: "100%", marginTop: 4, zIndex: 100 }} onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()}>
       <MI i="push_pin" l={convo.is_pinned ? "Unpin" : "Pin"} o={() => { act(`/api/conversations/${convo.id}/pin`, { pinned: !convo.is_pinned }); onClose(); }}/>
       <MI i={convo.is_muted ? "notifications_active" : "notifications_off"} l={convo.is_muted ? "Unmute" : "Mute"} o={() => { act(`/api/conversations/${convo.id}/mute`, { muted: !convo.is_muted }); onClose(); }}/>
       <MI i="mark_email_unread" l="Mark unread" o={() => { act(`/api/conversations/${convo.id}/unread`, { unread_count: 1 }); onClose(); }}/>
@@ -448,7 +448,7 @@ export default function Dashboard() {
               <button onClick={() => setShowSearch(!showSearch)} className={s.iconBtn} style={{ color: "var(--text-3)" }}><span className="material-symbols-rounded" style={{ fontSize: 20 }}>search</span></button>
               <div className="relative">
                 <button onMouseDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); setSidebarMenu(!sidebarMenu); }} className={s.iconBtn} style={{ color: "var(--text-3)" }}><span className="material-symbols-rounded" style={{ fontSize: 20 }}>more_vert</span></button>
-                {sidebarMenu && <div data-menu className={anim-menu} style={{ background: "var(--surface-2)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)", backdropFilter: "blur(20px)", position: "absolute", right: 0, top: "100%", marginTop: 4, zIndex: 100, minWidth: 220, borderRadius: 16, overflow: "hidden" }} onClick={e => e.stopPropagation()}>
+                {sidebarMenu && <div data-menu className="anim-menu" style={{ background: "var(--surface-2)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)", backdropFilter: "blur(20px)", position: "absolute", right: 0, top: "100%", marginTop: 4, zIndex: 100, minWidth: 220, borderRadius: 16, overflow: "hidden" }} onClick={e => e.stopPropagation()}>
                   {/* Theme Section */}
                   <div className="px-4 pt-2.5 pb-1"><p className="text-[10px] font-bold tracking-[0.08em] uppercase" style={{ color: "var(--text-4)" }}>Theme</p></div>
                   <div className="px-3 pb-1.5 flex gap-1">
@@ -547,7 +547,7 @@ export default function Dashboard() {
               <button onClick={() => { setShowChatSearch(!showChatSearch); setChatSearch(""); }} className={s.iconBtn} style={{ color: "var(--text-3)" }}><span className="material-symbols-rounded" style={{ fontSize: 20 }}>search</span></button>
               <div className="relative">
                 <button onMouseDown={e => e.stopPropagation()} onClick={e => { e.stopPropagation(); setHeaderMenu(!headerMenu); setChatMenuId(null); setMsgMenuId(null); }} className={s.iconBtn} style={{ color: "var(--text-3)" }}><span className="material-symbols-rounded" style={{ fontSize: 20 }}>more_vert</span></button>
-                {headerMenu && <div data-menu className={anim-menu} style={{ background: "var(--surface-2)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)", backdropFilter: "blur(16px)", position: "absolute", right: 0, top: "100%", marginTop: 4, zIndex: 100, borderRadius: 16, overflow: "hidden" }} onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()}>
+                {headerMenu && <div data-menu className="anim-menu" style={{ background: "var(--surface-2)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)", backdropFilter: "blur(16px)", position: "absolute", right: 0, top: "100%", marginTop: 4, zIndex: 100, borderRadius: 16, overflow: "hidden" }} onClick={e => e.stopPropagation()} onMouseDown={e => e.stopPropagation()}>
                   <MI i="push_pin" l={sel.is_pinned ? "Unpin" : "Pin"} o={() => act(`/api/conversations/${sel.id}/pin`, { pinned: !sel.is_pinned })}/>
                   <MI i={sel.is_muted ? "notifications_active" : "notifications_off"} l={sel.is_muted ? "Unmute" : "Mute"} o={() => act(`/api/conversations/${sel.id}/mute`, { muted: !sel.is_muted })}/>
                   <MI i="mark_email_unread" l="Mark unread" o={() => act(`/api/conversations/${sel.id}/unread`, { unread_count: 1 })}/>
