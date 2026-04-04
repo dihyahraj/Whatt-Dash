@@ -78,6 +78,9 @@ export default function Dashboard() {
   const [emojiCat, setEmojiCat] = useState("recent");
   const [recentEmojis, setRecentEmojis] = useState<string[]>([]);
   const [imgPreview, setImgPreview] = useState<string|null>(null);
+  const [pasteFile, setPasteFile] = useState<File|null>(null);
+  const [pastePreview, setPastePreview] = useState<string|null>(null);
+  const [pasteCaption, setPasteCaption] = useState("");
   const [headerMenu, setHeaderMenu] = useState(false);
   const [chatSearch, setChatSearch] = useState("");
   const [showChatSearch, setShowChatSearch] = useState(false);
@@ -154,6 +157,24 @@ export default function Dashboard() {
     el.style.transition = "height 0.2s cubic-bezier(0.16, 1, 0.3, 1)";
     el.style.height = to + "px"; el.focus();
   }
+  async function sendPasteFile() {
+    if (!pasteFile || !selId) return;
+    const f = pasteFile;
+    const ic = f.type.startsWith("image/") ? "📷" : f.type.startsWith("video/") ? "🎥" : "📄";
+    const tid = `temp_paste_${Date.now()}`;
+    addOptimisticMsg(tid, `${ic} Sending ${f.name}...`, f.type.startsWith("image/") ? "image" : "document");
+    setSending(true);
+    // Cleanup preview
+    if (pastePreview) URL.revokeObjectURL(pastePreview);
+    setPasteFile(null); setPastePreview(null); setPasteCaption("");
+    try {
+      const fd = new FormData(); fd.append("file", f); fd.append("caption", pasteCaption);
+      const res = await fetch(`/api/conversations/${selId}/send-media`, { method: "POST", body: fd });
+      if (!res.ok) { setMsgs(p => p.filter(m => m.id !== tid)); const d = await res.json(); alert("Error: " + JSON.stringify(d)); setSending(false); }
+      else { const real = await res.json(); lastSentIdsRef.current.add(real.id); setMsgs(p => p.map(m => m.id === tid ? { ...real } : m)); setTimeout(() => { setSending(false); setTimeout(() => lastSentIdsRef.current.delete(real.id), 10000); }, 3000); }
+    } catch (err) { setMsgs(p => p.filter(m => m.id !== tid)); alert("Error: " + String(err)); setSending(false); }
+  }
+  function cancelPaste() { if (pastePreview) URL.revokeObjectURL(pastePreview); setPasteFile(null); setPastePreview(null); setPasteCaption(""); }
 
   /* ═══ EFFECTS (unchanged logic) ═══ */
   useEffect(() => { fetchConvos(); fetchArchived(); fetchLabels(); fetchQuickReplies(); }, [fetchConvos, fetchArchived, fetchLabels, fetchQuickReplies]);
@@ -184,6 +205,31 @@ export default function Dashboard() {
   }, [selId, fetchConvos, sbRT]);
 
   useEffect(() => { if ("Notification" in window && Notification.permission === "default") Notification.requestPermission(); }, []);
+
+  // Clipboard paste — images/files
+  useEffect(() => {
+    const h = (e: ClipboardEvent) => {
+      if (!selId) return;
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (const item of Array.from(items)) {
+        if (item.kind === "file") {
+          e.preventDefault();
+          const file = item.getAsFile();
+          if (!file) continue;
+          setPasteFile(file);
+          setPasteCaption("");
+          if (file.type.startsWith("image/")) {
+            const url = URL.createObjectURL(file);
+            setPastePreview(url);
+          } else { setPastePreview(null); }
+          return;
+        }
+      }
+    };
+    document.addEventListener("paste", h);
+    return () => document.removeEventListener("paste", h);
+  }, [selId]);
 
   // PWA back button — go to sidebar instead of exiting app
   useEffect(() => {
@@ -821,6 +867,41 @@ export default function Dashboard() {
           <MI i="forward" l="Forward" o={() => { setForwardMsg(curMsg); setForwardSelected(new Set()); setMsgMenuId(null); setMsgMenuPos(null); }}/>
         </div>;
       })()}
+
+      {/* ▓▓ Paste File Preview ▓▓ */}
+      {pasteFile && <div className="fixed inset-0 z-[250] flex flex-col" style={{ background: "var(--bg)" }}>
+        {/* Header */}
+        <div className="flex items-center gap-3 px-4 sm:px-6 py-3" style={{ background: "var(--surface-1)", borderBottom: "1px solid var(--border)" }}>
+          <button onClick={cancelPaste} className="w-10 h-10 rounded-xl flex items-center justify-center tr hover:bg-[var(--surface-3)]" style={{ color: "var(--text-1)" }}><span className="material-symbols-rounded" style={{ fontSize: 22 }}>close</span></button>
+          <div className="flex-1 min-w-0">
+            <p className="text-[14px] font-bold truncate" style={{ color: "var(--text-1)" }}>{pasteFile.name}</p>
+            <p className="text-[11px]" style={{ color: "var(--text-3)" }}>{(pasteFile.size / 1024).toFixed(1)} KB · {pasteFile.type || "file"}</p>
+          </div>
+        </div>
+
+        {/* Preview Area */}
+        <div className="flex-1 flex items-center justify-center p-4 sm:p-8 overflow-auto" style={{ background: "var(--chat-bg)" }}>
+          {pastePreview ? (
+            <img src={pastePreview} alt="Preview" className="max-w-full max-h-full object-contain rounded-2xl" style={{ boxShadow: "var(--shadow-xl)" }}/>
+          ) : (
+            <div className="flex flex-col items-center gap-4 px-8 py-12 rounded-2xl" style={{ background: "var(--surface-1)", border: "1px solid var(--border)" }}>
+              <span className="material-symbols-rounded" style={{ fontSize: 48, color: "var(--text-4)" }}>description</span>
+              <p className="text-[15px] font-bold" style={{ color: "var(--text-1)" }}>{pasteFile.name}</p>
+              <p className="text-[12px]" style={{ color: "var(--text-3)" }}>{(pasteFile.size / 1024).toFixed(1)} KB</p>
+            </div>
+          )}
+        </div>
+
+        {/* Bottom — Caption + Send */}
+        <div className="px-4 sm:px-6 py-3 flex items-end gap-3" style={{ background: "var(--surface-1)", borderTop: "1px solid var(--border)", paddingBottom: "max(12px, env(safe-area-inset-bottom))" }}>
+          <div className="flex-1 rounded-2xl px-4 py-2.5" style={{ background: "var(--surface-3)", border: "1.5px solid var(--border)" }}>
+            <input type="text" value={pasteCaption} onChange={e => setPasteCaption(e.target.value)} onKeyDown={e => { if (e.key === "Enter") sendPasteFile(); }} placeholder="Add a caption..." autoFocus className="w-full bg-transparent text-[14px] focus:outline-none" style={{ color: "var(--text-1)" }}/>
+          </div>
+          <button onClick={sendPasteFile} className="w-12 h-12 rounded-xl flex items-center justify-center flex-shrink-0 shadow-lg tr hover:shadow-xl" style={{ background: "var(--primary)" }}>
+            <span className="material-symbols-rounded" style={{ fontSize: 22, color: "var(--primary-text)", fontVariationSettings: "'FILL' 1" }}>send</span>
+          </button>
+        </div>
+      </div>}
 
       {/* ▓▓ Image Preview ▓▓ */}
       {imgPreview && <div className="fixed inset-0 z-[200] flex items-center justify-center" style={{ background: "var(--bg-overlay)", backdropFilter: "blur(12px)" }} onClick={() => setImgPreview(null)}><button className="absolute top-5 right-5 w-10 h-10 rounded-full flex items-center justify-center text-white" style={{ background: "rgba(255,255,255,0.15)" }}>✕</button><img src={imgPreview} alt="" className="max-w-[90vw] max-h-[90vh] object-contain rounded-2xl shadow-2xl" onClick={e => e.stopPropagation()}/></div>}
