@@ -553,8 +553,7 @@ export default function Dashboard() {
                       <span className="text-[11px] truncate flex-1" style={{ color: "var(--text-3)" }}>{qr.content.slice(0, 60)}</span>
                     </button>)}
                   </div>
-                </div>
-              </div>;
+                </div>;
             })()}
 
             {/* Input Bar */}
