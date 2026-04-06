@@ -64,7 +64,13 @@ export async function POST(
 
   await supabase
     .from("conversations")
-    .update({ updated_at: new Date().toISOString() })
+    .update({
+      updated_at: new Date().toISOString(),
+      last_message: message,
+      last_message_type: "text",
+      last_message_role: "assistant",
+      last_message_time: new Date().toISOString(),
+    })
     .eq("id", id);
 
   return Response.json(msg);

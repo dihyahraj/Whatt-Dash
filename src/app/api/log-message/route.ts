@@ -48,7 +48,13 @@ export async function POST(request: NextRequest) {
     }).select().single();
 
     if (msgErr) return Response.json({ error: msgErr.message }, { status: 500 });
-    await sb.from("conversations").update({ updated_at: new Date().toISOString() }).eq("id", convo.id);
+    await sb.from("conversations").update({
+      updated_at: new Date().toISOString(),
+      last_message: message,
+      last_message_type: "text",
+      last_message_role: "assistant",
+      last_message_time: new Date().toISOString(),
+    }).eq("id", convo.id);
 
     return Response.json({ success: true, conversation_id: convo.id, message_id: msg.id, source: source || "n8n" });
   } catch (error) {

@@ -177,7 +177,13 @@ export async function POST(
     }).select().single();
 
     if (msgErr) return Response.json({ error: msgErr.message }, { status: 500 });
-    await supabase.from("conversations").update({ updated_at: new Date().toISOString() }).eq("id", id);
+    await supabase.from("conversations").update({
+      updated_at: new Date().toISOString(),
+      last_message: caption || (isVoice ? "🎵 Voice" : `[${waType}]`),
+      last_message_type: isVoice ? "audio" : waType,
+      last_message_role: "assistant",
+      last_message_time: new Date().toISOString(),
+    }).eq("id", id);
     return Response.json(msg);
   } catch (error) {
     console.error("[SEND-MEDIA] Error:", error);

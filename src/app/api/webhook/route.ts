@@ -166,7 +166,13 @@ export async function POST(request: NextRequest) {
       return Response.json({ error: insertError.message }, { status: 500 });
     }
 
-    await supabase.from("conversations").update({ updated_at: new Date().toISOString() }).eq("id", conversation.id);
+    await supabase.from("conversations").update({
+      updated_at: new Date().toISOString(),
+      last_message: rec.content,
+      last_message_type: rec.message_type || "text",
+      last_message_role: "user",
+      last_message_time: new Date().toISOString(),
+    }).eq("id", conversation.id);
     return Response.json({ status: "stored" });
   } catch (error) {
     console.error("Webhook error:", error);
