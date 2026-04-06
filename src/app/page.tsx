@@ -134,12 +134,16 @@ export default function Dashboard() {
   const sendingRef = useRef(false);
   const lastSentIdsRef = useRef<Set<string>>(new Set());
   const skipPollRef = useRef(false);
+  const [hasMoreMsgs, setHasMoreMsgs] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
 
   const sel = convos.find((c) => c.id === selId);
 
-  /* ═══ FETCHERS (unchanged logic) ═══ */
+  /* ═══ FETCHERS ═══ */
   const fetchConvos = useCallback(async () => { if (skipPollRef.current) return; try { const r = await fetch("/api/conversations"); if (skipPollRef.current) return; const d = await r.json(); if (skipPollRef.current) return; if (Array.isArray(d)) setConvos(d); } catch {} }, []);
-  const fetchMsgs = useCallback(async (id: string) => { if (sendingRef.current || skipPollRef.current) return; try { const r = await fetch(`/api/conversations/${id}/messages`); if (sendingRef.current || skipPollRef.current) return; const d = await r.json(); if (sendingRef.current || skipPollRef.current) return; if (Array.isArray(d)) setMsgs(d); } catch {} }, []);
+  const fetchMsgs = useCallback(async (id: string) => { if (sendingRef.current || skipPollRef.current) return; try { const r = await fetch(`/api/conversations/${id}/messages?limit=50`); if (sendingRef.current || skipPollRef.current) return; const d = await r.json(); if (sendingRef.current || skipPollRef.current) return; if (Array.isArray(d)) { setMsgs(d); setHasMoreMsgs(d.length >= 50); } } catch {} }, []);
+  const fetchNewMsgs = useCallback(async (id: string) => { if (sendingRef.current || skipPollRef.current) return; try { const r = await fetch(`/api/conversations/${id}/messages?limit=50`); if (sendingRef.current || skipPollRef.current) return; const d = await r.json(); if (sendingRef.current || skipPollRef.current) return; if (Array.isArray(d)) { setMsgs(prev => { const existingIds = new Set(prev.map(m => m.id)); const newMsgs = d.filter((m: Message) => !existingIds.has(m.id)); if (newMsgs.length === 0) return prev; return [...prev, ...newMsgs]; }); } } catch {} }, []);
+  async function loadOlderMsgs() { if (!selId || loadingMore || !hasMoreMsgs) return; const oldest = msgs[0]?.created_at; if (!oldest) return; setLoadingMore(true); try { const r = await fetch(`/api/conversations/${selId}/messages?limit=50&before=${encodeURIComponent(oldest)}`); const d = await r.json(); if (Array.isArray(d)) { if (d.length < 50) setHasMoreMsgs(false); if (d.length > 0) { const el = chatBoxRef.current; const prevHeight = el?.scrollHeight || 0; setMsgs(prev => [...d, ...prev]); requestAnimationFrame(() => { if (el) el.scrollTop = el.scrollHeight - prevHeight; }); } else { setHasMoreMsgs(false); } } } catch {} setLoadingMore(false); }
   const fetchArchived = useCallback(async () => { if (skipPollRef.current) return; try { const r = await fetch("/api/conversations/archived"); if (skipPollRef.current) return; const d = await r.json(); if (skipPollRef.current) return; if (Array.isArray(d)) setArchived(d); } catch {} }, []);
   const fetchLabels = useCallback(async () => { try { const r = await fetch("/api/labels"); const d = await r.json(); if (Array.isArray(d)) setLabels(d); } catch {} }, []);
   const fetchQuickReplies = useCallback(async () => { try { const r = await fetch("/api/quick-replies"); const d = await r.json(); if (Array.isArray(d)) setQuickReplies(d); } catch {} }, []);
@@ -189,13 +193,13 @@ export default function Dashboard() {
   // Smooth close helpers
   function closeEmoji() { setEmojiClosing(true); setTimeout(() => { setShowEmoji(false); setEmojiClosing(false); }, 200); }
   function closeQR() { setQrClosing(true); setTimeout(() => { setShowQuickReplies(false); setQrClosing(false); }, 200); }
-  useEffect(() => { if (selId) { fetchMsgs(selId); fetch(`/api/conversations/${selId}/read`, { method: "POST" }).catch(() => {}); setConvos(p => p.map(c => c.id === selId ? { ...c, unread_count: 0 } : c)); setIsAtBottom(true); } }, [selId, fetchMsgs]);
+  useEffect(() => { if (selId) { setHasMoreMsgs(true); fetchMsgs(selId); fetch(`/api/conversations/${selId}/read`, { method: "POST" }).catch(() => {}); setConvos(p => p.map(c => c.id === selId ? { ...c, unread_count: 0 } : c)); setIsAtBottom(true); } }, [selId, fetchMsgs]);
   useEffect(() => { if (isAtBottom) { endRef.current?.scrollIntoView({ behavior: "smooth" }); setHasNewMsg(false); } else if (msgs.length > 0) { setHasNewMsg(true); } }, [msgs, isAtBottom]);
 
-  function handleScroll() { const el = chatBoxRef.current; if (!el) return; const ab = el.scrollHeight - el.scrollTop - el.clientHeight < 80; setIsAtBottom(ab); if (ab) setHasNewMsg(false); }
+  function handleScroll() { const el = chatBoxRef.current; if (!el) return; const ab = el.scrollHeight - el.scrollTop - el.clientHeight < 80; setIsAtBottom(ab); if (ab) setHasNewMsg(false); if (el.scrollTop < 100 && hasMoreMsgs && !loadingMore) loadOlderMsgs(); }
   function scrollToBottom() { endRef.current?.scrollIntoView({ behavior: "smooth" }); setIsAtBottom(true); setHasNewMsg(false); }
 
-  useEffect(() => { const iv = setInterval(() => { if (skipPollRef.current || sendingRef.current) return; fetchConvos(); if (selId) { fetchMsgs(selId); fetch(`/api/conversations/${selId}/read`, { method: "POST" }).catch(() => {}); setConvos(p => p.map(c => c.id === selId ? { ...c, unread_count: 0 } : c)); } }, 10000); return () => clearInterval(iv); }, [fetchConvos, fetchMsgs, selId]);
+  useEffect(() => { const iv = setInterval(() => { if (skipPollRef.current || sendingRef.current) return; fetchConvos(); if (selId) { fetchNewMsgs(selId); fetch(`/api/conversations/${selId}/read`, { method: "POST" }).catch(() => {}); setConvos(p => p.map(c => c.id === selId ? { ...c, unread_count: 0 } : c)); } }, 10000); return () => clearInterval(iv); }, [fetchConvos, fetchNewMsgs, selId]);
 
   function notifyNewMsg(msg: Message) { const c = convos.find(x => x.id === msg.conversation_id); if (c?.is_muted) return; const title = c?.name || c?.phone || "New Message"; const body = msg.content?.substring(0, 100) || "New message"; if ("Notification" in window && Notification.permission === "granted") { new Notification(title, { body, icon: "/favicon.ico", tag: msg.conversation_id }); } try { const ctx = new AudioContext(); const o = ctx.createOscillator(); const g = ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.frequency.value = 800; g.gain.value = 0.3; o.start(); g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3); o.stop(ctx.currentTime + 0.3); } catch {} }
 
@@ -572,6 +576,8 @@ export default function Dashboard() {
 
           {/* ── Messages ── */}
           <div ref={chatBoxRef} onScroll={handleScroll} className="flex-1 overflow-y-auto px-2.5 sm:px-12 lg:px-20 py-3 sm:py-4" style={{ background: "var(--chat-bg)" }}>
+            {loadingMore && <div className="flex justify-center py-3"><div className="w-5 h-5 border-2 rounded-full animate-spin" style={{ borderColor: "var(--primary)", borderTopColor: "transparent" }}/></div>}
+            {!hasMoreMsgs && msgs.length > 0 && <div className="flex justify-center py-3"><span className="text-[11px] px-3 py-1 rounded-full" style={{ background: "var(--surface-1)", color: "var(--text-4)" }}>Start of conversation</span></div>}
             {displayMsgs.map((msg, i) => {
               const isMe = msg.role === "assistant";
               const replied = msg.reply_to_id ? msgs.find(m => m.id === msg.reply_to_id) : null;
