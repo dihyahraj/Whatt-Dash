@@ -1,14 +1,6 @@
 import { getSupabase } from "@/lib/supabase";
 
-// Cache to reduce DB load (5 second TTL)
-let cache: { data: unknown; time: number } | null = null;
-const CACHE_TTL = 5000;
-
 export async function GET() {
-  if (cache && Date.now() - cache.time < CACHE_TTL) {
-    return Response.json(cache.data);
-  }
-
   const supabase = getSupabase();
   const { data: conversations, error } = await supabase
     .from("conversations")
@@ -18,7 +10,7 @@ export async function GET() {
     .order("updated_at", { ascending: false });
 
   if (error) return Response.json({ error: error.message }, { status: 500 });
-  if (!conversations?.length) { cache = { data: [], time: Date.now() }; return Response.json([]); }
+  if (!conversations?.length) return Response.json([]);
 
   const ids = conversations.map(c => c.id);
 
@@ -44,6 +36,5 @@ export async function GET() {
     labels: labelMap[convo.id] || [],
   }));
 
-  cache = { data: result, time: Date.now() };
   return Response.json(result);
 }
