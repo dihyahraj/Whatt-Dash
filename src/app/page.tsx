@@ -5,6 +5,13 @@ import { createClient } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
 import type { ConversationWithLastMessage, Message, MessageType, Label, QuickReply } from "@/lib/types";
+import { getCachedConversations, setCachedConversations, getCachedMessages, mergeCachedMessages, upsertCachedMessage } from "@/lib/cache";
+
+/* Set to true ONLY if your Supabase project is on a plan with Image
+   Transformations (Pro+). It shows a tiny (~few KB) thumbnail instead of
+   the plain placeholder. Falls back to the placeholder automatically if a
+   thumbnail fails to load. Default false = zero download until you tap. */
+const IMG_THUMBNAILS = false;
 
 /* ═══ CONSTANTS ═══ */
 const EMOJIS: Record<string, string[]> = {
@@ -134,16 +141,18 @@ export default function Dashboard() {
   const sendingRef = useRef(false);
   const lastSentIdsRef = useRef<Set<string>>(new Set());
   const skipPollRef = useRef(false);
+  const scopeRef = useRef("anon"); // cache scope = current user id
+  const selIdRef = useRef<string | null>(null); // guards async cache/fetch races
   const [hasMoreMsgs, setHasMoreMsgs] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
 
   const sel = convos.find((c) => c.id === selId);
 
   /* ═══ FETCHERS ═══ */
-  const fetchConvos = useCallback(async () => { if (skipPollRef.current) return; try { const r = await fetch("/api/conversations"); if (skipPollRef.current) return; const d = await r.json(); if (skipPollRef.current) return; if (Array.isArray(d)) setConvos(d); } catch {} }, []);
-  const fetchMsgs = useCallback(async (id: string) => { if (sendingRef.current || skipPollRef.current) return; try { const r = await fetch(`/api/conversations/${id}/messages?limit=50`); if (sendingRef.current || skipPollRef.current) return; const d = await r.json(); if (sendingRef.current || skipPollRef.current) return; if (Array.isArray(d)) { setMsgs(d); setHasMoreMsgs(d.length >= 50); } } catch {} }, []);
-  const fetchNewMsgs = useCallback(async (id: string) => { if (sendingRef.current || skipPollRef.current) return; try { const r = await fetch(`/api/conversations/${id}/messages?limit=50`); if (sendingRef.current || skipPollRef.current) return; const d = await r.json(); if (sendingRef.current || skipPollRef.current) return; if (Array.isArray(d)) { setMsgs(prev => { if (prev.length === 0) return d; if (prev[0]?.conversation_id !== id) return d; const existingIds = new Set(prev.map(m => m.id)); const newMsgs = d.filter((m: Message) => !existingIds.has(m.id)); if (newMsgs.length === 0) return prev; return [...prev, ...newMsgs]; }); } } catch {} }, []);
-  async function loadOlderMsgs() { if (!selId || loadingMore || !hasMoreMsgs) return; const oldest = msgs[0]?.created_at; if (!oldest) return; setLoadingMore(true); try { const r = await fetch(`/api/conversations/${selId}/messages?limit=50&before=${encodeURIComponent(oldest)}`); const d = await r.json(); if (Array.isArray(d)) { if (d.length < 50) setHasMoreMsgs(false); if (d.length > 0) { const el = chatBoxRef.current; const prevHeight = el?.scrollHeight || 0; setMsgs(prev => [...d, ...prev]); requestAnimationFrame(() => { if (el) el.scrollTop = el.scrollHeight - prevHeight; }); } else { setHasMoreMsgs(false); } } } catch {} setLoadingMore(false); }
+  const fetchConvos = useCallback(async () => { if (skipPollRef.current) return; try { const r = await fetch("/api/conversations"); if (skipPollRef.current) return; const d = await r.json(); if (skipPollRef.current) return; if (Array.isArray(d)) { setConvos(d); setCachedConversations(scopeRef.current, d); } } catch {} }, []);
+  const fetchMsgs = useCallback(async (id: string) => { if (sendingRef.current || skipPollRef.current) return; try { const r = await fetch(`/api/conversations/${id}/messages?limit=50`); if (sendingRef.current || skipPollRef.current) return; const d = await r.json(); if (sendingRef.current || skipPollRef.current) return; if (Array.isArray(d)) { if (selIdRef.current === id) { setMsgs(d); setHasMoreMsgs(d.length >= 50); } mergeCachedMessages(scopeRef.current, id, d); } } catch {} }, []);
+  const fetchNewMsgs = useCallback(async (id: string) => { if (sendingRef.current || skipPollRef.current) return; try { const r = await fetch(`/api/conversations/${id}/messages?limit=50`); if (sendingRef.current || skipPollRef.current) return; const d = await r.json(); if (sendingRef.current || skipPollRef.current) return; if (Array.isArray(d)) { setMsgs(prev => { if (prev.length === 0) return d; if (prev[0]?.conversation_id !== id) return d; const existingIds = new Set(prev.map(m => m.id)); const newMsgs = d.filter((m: Message) => !existingIds.has(m.id)); if (newMsgs.length === 0) return prev; return [...prev, ...newMsgs]; }); mergeCachedMessages(scopeRef.current, id, d); } } catch {} }, []);
+  async function loadOlderMsgs() { if (!selId || loadingMore || !hasMoreMsgs) return; const oldest = msgs[0]?.created_at; if (!oldest) return; setLoadingMore(true); try { const r = await fetch(`/api/conversations/${selId}/messages?limit=50&before=${encodeURIComponent(oldest)}`); const d = await r.json(); if (Array.isArray(d)) { if (d.length < 50) setHasMoreMsgs(false); if (d.length > 0) { const el = chatBoxRef.current; const prevHeight = el?.scrollHeight || 0; setMsgs(prev => [...d, ...prev]); mergeCachedMessages(scopeRef.current, selId, d); requestAnimationFrame(() => { if (el) el.scrollTop = el.scrollHeight - prevHeight; }); } else { setHasMoreMsgs(false); } } } catch {} setLoadingMore(false); }
   const fetchArchived = useCallback(async () => { if (skipPollRef.current) return; try { const r = await fetch("/api/conversations/archived"); if (skipPollRef.current) return; const d = await r.json(); if (skipPollRef.current) return; if (Array.isArray(d)) setArchived(d); } catch {} }, []);
   const fetchLabels = useCallback(async () => { try { const r = await fetch("/api/labels"); const d = await r.json(); if (Array.isArray(d)) setLabels(d); } catch {} }, []);
   const fetchQuickReplies = useCallback(async () => { try { const r = await fetch("/api/quick-replies"); const d = await r.json(); if (Array.isArray(d)) setQuickReplies(d); } catch {} }, []);
@@ -187,13 +196,15 @@ export default function Dashboard() {
 
   /* ═══ EFFECTS (unchanged logic) ═══ */
   useEffect(() => { fetchConvos(); fetchArchived(); fetchLabels(); fetchQuickReplies(); }, [fetchConvos, fetchArchived, fetchLabels, fetchQuickReplies]);
+  // Hydrate the sidebar instantly from cache, then let the background fetch refresh it.
+  useEffect(() => { const sc = user?.id; if (!sc) return; scopeRef.current = sc; getCachedConversations(sc).then(cached => { if (cached && cached.length) setConvos(prev => prev.length ? prev : cached); }); }, [user?.id]);
   // Load recent emojis from localStorage
   useEffect(() => { try { const r = JSON.parse(localStorage.getItem("wd-recent-emoji") || "[]"); if (Array.isArray(r)) setRecentEmojis(r.slice(0, 32)); } catch {} }, []);
   function addRecentEmoji(em: string) { const updated = [em, ...recentEmojis.filter(e => e !== em)].slice(0, 32); setRecentEmojis(updated); localStorage.setItem("wd-recent-emoji", JSON.stringify(updated)); }
   // Smooth close helpers
   function closeEmoji() { setEmojiClosing(true); setTimeout(() => { setShowEmoji(false); setEmojiClosing(false); }, 200); }
   function closeQR() { setQrClosing(true); setTimeout(() => { setShowQuickReplies(false); setQrClosing(false); }, 200); }
-  useEffect(() => { if (selId) { setMsgs([]); setHasMoreMsgs(true); fetchMsgs(selId); fetch(`/api/conversations/${selId}/read`, { method: "POST" }).catch(() => {}); setConvos(p => p.map(c => c.id === selId ? { ...c, unread_count: 0 } : c)); setIsAtBottom(true); } }, [selId, fetchMsgs]);
+  useEffect(() => { selIdRef.current = selId; if (selId) { const id = selId; setMsgs([]); setHasMoreMsgs(true); getCachedMessages(scopeRef.current, id).then(cached => { if (selIdRef.current === id && cached && cached.length) setMsgs(prev => prev.length ? prev : cached); }); fetchMsgs(id); fetch(`/api/conversations/${id}/read`, { method: "POST" }).catch(() => {}); setConvos(p => p.map(c => c.id === id ? { ...c, unread_count: 0 } : c)); setIsAtBottom(true); } }, [selId, fetchMsgs]);
   useEffect(() => { if (isAtBottom) { endRef.current?.scrollIntoView({ behavior: "smooth" }); setHasNewMsg(false); } else if (msgs.length > 0) { setHasNewMsg(true); } }, [msgs, isAtBottom]);
 
   function handleScroll() { const el = chatBoxRef.current; if (!el) return; const ab = el.scrollHeight - el.scrollTop - el.clientHeight < 80; setIsAtBottom(ab); if (ab) setHasNewMsg(false); if (el.scrollTop < 100 && hasMoreMsgs && !loadingMore) loadOlderMsgs(); }
@@ -206,8 +217,8 @@ export default function Dashboard() {
   useEffect(() => {
     if (!sbRT) return;
     const ch = sbRT.channel("rt")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (p) => { const m = p.new as Message; if (m.conversation_id === selId) { setMsgs(prev => { if (prev.some(x => x.id === m.id)) return prev; if (lastSentIdsRef.current.has(m.id)) return prev; const ti = prev.findIndex(x => x.id.startsWith("temp_") && x.content === m.content && x.role === m.role); if (ti >= 0) { const u = [...prev]; u[ti] = m; return u; } if (m.role === "assistant" && sendingRef.current) return prev; return [...prev, m]; }); if (m.role === "user") fetch(`/api/conversations/${selId}/read`, { method: "POST" }).catch(() => {}); } if (m.role === "user") notifyNewMsg(m); fetchConvos(); })
-      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "messages" }, (p) => { const u = p.new as Message; setMsgs(prev => prev.map(m => m.id === u.id ? u : m)); })
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (p) => { const m = p.new as Message; upsertCachedMessage(scopeRef.current, m.conversation_id, m); if (m.conversation_id === selId) { setMsgs(prev => { if (prev.some(x => x.id === m.id)) return prev; if (lastSentIdsRef.current.has(m.id)) return prev; const ti = prev.findIndex(x => x.id.startsWith("temp_") && x.content === m.content && x.role === m.role); if (ti >= 0) { const u = [...prev]; u[ti] = m; return u; } if (m.role === "assistant" && sendingRef.current) return prev; return [...prev, m]; }); if (m.role === "user") fetch(`/api/conversations/${selId}/read`, { method: "POST" }).catch(() => {}); } if (m.role === "user") notifyNewMsg(m); fetchConvos(); })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "messages" }, (p) => { const u = p.new as Message; upsertCachedMessage(scopeRef.current, u.conversation_id, u); setMsgs(prev => prev.map(m => m.id === u.id ? u : m)); })
       .on("postgres_changes", { event: "*", schema: "public", table: "conversations" }, () => fetchConvos())
       .subscribe();
     return () => { sbRT.removeChannel(ch); };
@@ -334,8 +345,8 @@ export default function Dashboard() {
   function media(msg: Message) {
     if (msg.is_deleted) return <p className="italic text-[13px]" style={{ color: "var(--text-4)" }}>🚫 This message was deleted</p>;
     switch (msg.message_type) {
-      case "image": return <div>{msg.media_url && <img src={msg.media_url} alt="" className="rounded-xl max-w-[260px] max-h-[300px] object-cover cursor-pointer hover:brightness-[0.92] tr" onClick={() => setImgPreview(msg.media_url)}/>}{msg.media_caption && msg.media_caption !== "[image]" && <p className="text-[13px] mt-1.5 whitespace-pre-wrap select-text">{msg.media_caption}</p>}</div>;
-      case "video": return <div>{msg.media_url ? <video controls className="rounded-xl max-w-[260px]" preload="metadata"><source src={msg.media_url} type={msg.media_mime_type || "video/mp4"}/></video> : <span className="text-[13px]">🎥 Video</span>}{msg.media_caption && <p className="text-[13px] mt-1.5 select-text">{msg.media_caption}</p>}</div>;
+      case "image": return <div><MediaThumb msg={msg} onOpen={(u) => setImgPreview(u)}/>{msg.media_caption && msg.media_caption !== "[image]" && <p className="text-[13px] mt-1.5 whitespace-pre-wrap select-text">{msg.media_caption}</p>}</div>;
+      case "video": return <div><MediaThumb msg={msg} onOpen={() => {}}/>{msg.media_caption && <p className="text-[13px] mt-1.5 select-text">{msg.media_caption}</p>}</div>;
       case "audio": return msg.media_url ? <VoicePlayer src={msg.media_url} msgId={msg.id} time={mt(msg.created_at)} isMe={msg.role === "assistant"} status={msg.status}/> : <div className="flex items-center gap-2 text-[13px]" style={{ color: "var(--text-3)" }}><div className="w-3 h-3 rounded-full animate-pulse" style={{ background: "var(--primary)" }}/><span>Sending voice...</span></div>;
       case "document": return <a href={msg.media_url || "#"} target="_blank" rel="noreferrer" className="flex items-center gap-3 rounded-xl p-3 min-w-[200px] tr" style={{ background: "var(--primary-muted)" }}><div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: "var(--primary-muted)" }}><span className="material-symbols-rounded" style={{ fontSize: 20, color: "var(--primary)" }}>description</span></div><div className="flex-1 min-w-0"><p className="text-[13px] font-semibold truncate">{msg.media_filename || "Document"}</p><p className="text-[11px] mt-0.5" style={{ color: "var(--text-3)" }}>{msg.media_mime_type || "File"}</p></div><span className="material-symbols-rounded" style={{ fontSize: 16, color: "var(--text-4)" }}>open_in_new</span></a>;
       case "sticker": return msg.media_url ? <img src={msg.media_url} alt="" className="w-[120px] h-[120px] object-contain"/> : <span className="text-4xl">🏷️</span>;
@@ -970,6 +981,42 @@ export default function Dashboard() {
 
       {/* No fixed backdrop — document click listener handles closing */}
     </div>
+  );
+}
+
+/* ═══ MEDIA THUMB — tap-to-load; bytes never cached ═══ */
+function MediaThumb({ msg, onOpen }: { msg: Message; onOpen: (url: string) => void }) {
+  const [loaded, setLoaded] = useState(false);
+  const [thumbErr, setThumbErr] = useState(false);
+  const url = msg.media_url;
+  const isVideo = msg.message_type === "video";
+  const meta = isVideo ? { label: "Video", color: "#8b5cf6" } : { label: "Photo", color: "#10b981" };
+
+  if (!url) return (
+    <div className="flex items-center gap-2 text-[13px]" style={{ color: "var(--text-3)" }}>
+      <div className="w-3 h-3 rounded-full animate-pulse" style={{ background: "var(--primary)" }}/>
+      <span>Receiving {meta.label.toLowerCase()}...</span>
+    </div>
+  );
+
+  if (loaded) {
+    if (isVideo) return <video controls autoPlay className="rounded-xl max-w-[260px]" preload="metadata"><source src={url} type={msg.media_mime_type || "video/mp4"}/></video>;
+    return <img src={url} alt="" className="rounded-xl max-w-[260px] max-h-[300px] object-cover cursor-pointer hover:brightness-[0.92] tr" onClick={() => onOpen(url)}/>;
+  }
+
+  // Optional tiny thumbnail via Supabase image transform (images only, Pro+ plans).
+  const thumbUrl = (!isVideo && IMG_THUMBNAILS && !thumbErr)
+    ? url.replace("/storage/v1/object/public/", "/storage/v1/render/image/public/") + (url.includes("?") ? "&" : "?") + "width=220&quality=25"
+    : null;
+
+  return (
+    <button onClick={(e) => { e.stopPropagation(); setLoaded(true); }} className="relative flex flex-col items-center justify-center gap-2 rounded-xl overflow-hidden tr hover:brightness-95" style={{ width: 220, height: 150, background: "var(--surface-3)", border: "1px dashed var(--border)" }}>
+      {thumbUrl && <img src={thumbUrl} alt="" loading="lazy" onError={() => setThumbErr(true)} className="absolute inset-0 w-full h-full object-cover" style={{ filter: "blur(1px)" }}/>}
+      <div className="relative w-12 h-12 rounded-full flex items-center justify-center" style={{ background: thumbUrl ? "rgba(0,0,0,0.45)" : `${meta.color}22` }}>
+        <span className="material-symbols-rounded" style={{ fontSize: 26, color: thumbUrl ? "#fff" : meta.color, fontVariationSettings: isVideo ? "'FILL' 1" : "'FILL' 0" }}>{isVideo ? "play_arrow" : "download"}</span>
+      </div>
+      <span className="relative text-[12px] font-semibold" style={{ color: thumbUrl ? "#fff" : "var(--text-2)" }}>Tap to load {meta.label}</span>
+    </button>
   );
 }
 
