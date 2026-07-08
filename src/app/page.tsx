@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback, useMemo } from "react";
+import { useEffect, useLayoutEffect, useState, useRef, useCallback, useMemo } from "react";
 import { createClient } from "@supabase/supabase-js";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/components/AuthProvider";
@@ -30,6 +30,15 @@ const s = {
   iconBtn: "w-9 h-9 rounded-xl flex items-center justify-center tr cursor-pointer",
   menuWrap: "rounded-2xl py-1 min-w-[200px] anim-scale-in overflow-hidden",
 };
+
+/* Lightweight signature of the conversation list — lets polling skip a
+   re-render when nothing meaningful changed (id/order/unread/last msg/flags). */
+function convosSig(list: ConversationWithLastMessage[]): string {
+  if (!Array.isArray(list)) return "";
+  return list
+    .map((c) => `${c.id}:${c.updated_at}:${c.unread_count}:${c.last_message}:${c.is_pinned ? 1 : 0}:${c.is_muted ? 1 : 0}:${c.is_archived ? 1 : 0}:${c.labels?.length || 0}`)
+    .join("|");
+}
 
 export default function Dashboard() {
   const { user, loading: authLoading, signOut, supabase } = useAuth();
@@ -143,13 +152,15 @@ export default function Dashboard() {
   const skipPollRef = useRef(false);
   const scopeRef = useRef("anon"); // cache scope = current user id
   const selIdRef = useRef<string | null>(null); // guards async cache/fetch races
+  const didInitialScrollRef = useRef(false); // instant-jump-to-bottom on chat open
+  const lastMsgIdRef = useRef<string | null>(null); // detect genuinely new bottom message
   const [hasMoreMsgs, setHasMoreMsgs] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
 
   const sel = convos.find((c) => c.id === selId);
 
   /* ═══ FETCHERS ═══ */
-  const fetchConvos = useCallback(async () => { if (skipPollRef.current) return; try { const r = await fetch("/api/conversations"); if (skipPollRef.current) return; const d = await r.json(); if (skipPollRef.current) return; if (Array.isArray(d)) { setConvos(d); setCachedConversations(scopeRef.current, d); } } catch {} }, []);
+  const fetchConvos = useCallback(async () => { if (skipPollRef.current) return; try { const r = await fetch("/api/conversations"); if (skipPollRef.current) return; const d = await r.json(); if (skipPollRef.current) return; if (Array.isArray(d)) { setConvos(prev => convosSig(prev) === convosSig(d) ? prev : d); setCachedConversations(scopeRef.current, d); } } catch {} }, []);
   const fetchMsgs = useCallback(async (id: string) => { if (sendingRef.current || skipPollRef.current) return; try { const r = await fetch(`/api/conversations/${id}/messages?limit=50`); if (sendingRef.current || skipPollRef.current) return; const d = await r.json(); if (sendingRef.current || skipPollRef.current) return; if (Array.isArray(d)) { if (selIdRef.current === id) { setMsgs(d); setHasMoreMsgs(d.length >= 50); } mergeCachedMessages(scopeRef.current, id, d); } } catch {} }, []);
   const fetchNewMsgs = useCallback(async (id: string) => { if (sendingRef.current || skipPollRef.current) return; try { const r = await fetch(`/api/conversations/${id}/messages?limit=50`); if (sendingRef.current || skipPollRef.current) return; const d = await r.json(); if (sendingRef.current || skipPollRef.current) return; if (Array.isArray(d)) { setMsgs(prev => { if (prev.length === 0) return d; if (prev[0]?.conversation_id !== id) return d; const existingIds = new Set(prev.map(m => m.id)); const newMsgs = d.filter((m: Message) => !existingIds.has(m.id)); if (newMsgs.length === 0) return prev; return [...prev, ...newMsgs]; }); mergeCachedMessages(scopeRef.current, id, d); } } catch {} }, []);
   async function loadOlderMsgs() { if (!selId || loadingMore || !hasMoreMsgs) return; const oldest = msgs[0]?.created_at; if (!oldest) return; setLoadingMore(true); try { const r = await fetch(`/api/conversations/${selId}/messages?limit=50&before=${encodeURIComponent(oldest)}`); const d = await r.json(); if (Array.isArray(d)) { if (d.length < 50) setHasMoreMsgs(false); if (d.length > 0) { const el = chatBoxRef.current; const prevHeight = el?.scrollHeight || 0; setMsgs(prev => [...d, ...prev]); mergeCachedMessages(scopeRef.current, selId, d); requestAnimationFrame(() => { if (el) el.scrollTop = el.scrollHeight - prevHeight; }); } else { setHasMoreMsgs(false); } } } catch {} setLoadingMore(false); }
@@ -204,13 +215,16 @@ export default function Dashboard() {
   // Smooth close helpers
   function closeEmoji() { setEmojiClosing(true); setTimeout(() => { setShowEmoji(false); setEmojiClosing(false); }, 200); }
   function closeQR() { setQrClosing(true); setTimeout(() => { setShowQuickReplies(false); setQrClosing(false); }, 200); }
-  useEffect(() => { selIdRef.current = selId; if (selId) { const id = selId; setMsgs([]); setHasMoreMsgs(true); getCachedMessages(scopeRef.current, id).then(cached => { if (selIdRef.current === id && cached && cached.length) setMsgs(prev => prev.length ? prev : cached); }); fetchMsgs(id); fetch(`/api/conversations/${id}/read`, { method: "POST" }).catch(() => {}); setConvos(p => p.map(c => c.id === id ? { ...c, unread_count: 0 } : c)); setIsAtBottom(true); } }, [selId, fetchMsgs]);
-  useEffect(() => { if (isAtBottom) { endRef.current?.scrollIntoView({ behavior: "smooth" }); setHasNewMsg(false); } else if (msgs.length > 0) { setHasNewMsg(true); } }, [msgs, isAtBottom]);
+  useEffect(() => { selIdRef.current = selId; didInitialScrollRef.current = false; lastMsgIdRef.current = null; if (selId) { const id = selId; setMsgs([]); setHasMoreMsgs(true); getCachedMessages(scopeRef.current, id).then(cached => { if (selIdRef.current === id && cached && cached.length) setMsgs(prev => prev.length ? prev : cached); }); fetchMsgs(id); fetch(`/api/conversations/${id}/read`, { method: "POST" }).catch(() => {}); setConvos(p => { const c = p.find(x => x.id === id); if (!c || c.unread_count === 0) return p; return p.map(x => x.id === id ? { ...x, unread_count: 0 } : x); }); setIsAtBottom(true); } }, [selId, fetchMsgs]);
+  // Instant jump to the latest message on first render of a chat — no animation, no visible scroll.
+  useLayoutEffect(() => { if (!selId || msgs.length === 0 || didInitialScrollRef.current) return; const el = chatBoxRef.current; if (el) el.scrollTop = el.scrollHeight; didInitialScrollRef.current = true; lastMsgIdRef.current = msgs[msgs.length - 1]?.id ?? null; setIsAtBottom(true); setHasNewMsg(false); }, [msgs, selId]);
+  // After the initial jump: only react to a genuinely NEW bottom message (not status/reaction updates or older-message loads).
+  useEffect(() => { if (!didInitialScrollRef.current) return; const lastId = msgs.length ? msgs[msgs.length - 1].id : null; const isNewBottom = lastId !== lastMsgIdRef.current; lastMsgIdRef.current = lastId; if (!isNewBottom) return; if (isAtBottom) { endRef.current?.scrollIntoView({ behavior: "smooth" }); setHasNewMsg(false); } else { setHasNewMsg(true); } }, [msgs, isAtBottom]);
 
   function handleScroll() { const el = chatBoxRef.current; if (!el) return; const ab = el.scrollHeight - el.scrollTop - el.clientHeight < 80; setIsAtBottom(ab); if (ab) setHasNewMsg(false); if (el.scrollTop < 100 && hasMoreMsgs && !loadingMore) loadOlderMsgs(); }
   function scrollToBottom() { endRef.current?.scrollIntoView({ behavior: "smooth" }); setIsAtBottom(true); setHasNewMsg(false); }
 
-  useEffect(() => { const iv = setInterval(() => { if (skipPollRef.current || sendingRef.current) return; fetchConvos(); if (selId) { fetchNewMsgs(selId); fetch(`/api/conversations/${selId}/read`, { method: "POST" }).catch(() => {}); setConvos(p => p.map(c => c.id === selId ? { ...c, unread_count: 0 } : c)); } }, 10000); return () => clearInterval(iv); }, [fetchConvos, fetchNewMsgs, selId]);
+  useEffect(() => { const iv = setInterval(() => { if (skipPollRef.current || sendingRef.current) return; fetchConvos(); if (selId) { fetchNewMsgs(selId); fetch(`/api/conversations/${selId}/read`, { method: "POST" }).catch(() => {}); setConvos(p => { const c = p.find(x => x.id === selId); if (!c || c.unread_count === 0) return p; return p.map(x => x.id === selId ? { ...x, unread_count: 0 } : x); }); } }, 10000); return () => clearInterval(iv); }, [fetchConvos, fetchNewMsgs, selId]);
 
   function notifyNewMsg(msg: Message) { const c = convos.find(x => x.id === msg.conversation_id); if (c?.is_muted) return; const title = c?.name || c?.phone || "New Message"; const body = msg.content?.substring(0, 100) || "New message"; if ("Notification" in window && Notification.permission === "granted") { new Notification(title, { body, icon: "/favicon.ico", tag: msg.conversation_id }); } try { const ctx = new AudioContext(); const o = ctx.createOscillator(); const g = ctx.createGain(); o.connect(g); g.connect(ctx.destination); o.frequency.value = 800; g.gain.value = 0.3; o.start(); g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3); o.stop(ctx.currentTime + 0.3); } catch {} }
 
