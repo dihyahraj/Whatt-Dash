@@ -25,8 +25,8 @@ const AuthContext = createContext<AuthCtx>({
 
 export function useAuth() { return useContext(AuthContext); }
 
-async function serverCheckAllowed(email: string): Promise<{ allowed: boolean; display_name?: string; role?: string }> {
-  try { const r = await fetch("/api/auth/check", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) }); return await r.json(); } catch { return { allowed: false }; }
+async function serverCheckAllowed(email: string): Promise<{ allowed: boolean; reason?: string; display_name?: string; role?: string }> {
+  try { const r = await fetch("/api/auth/check", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) }); return await r.json(); } catch { return { allowed: false, reason: "server_error" }; }
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -36,10 +36,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const supabase = useMemo(() => { const u = process.env.NEXT_PUBLIC_SUPABASE_URL, k = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY; if (!u || !k) return null; return createClient(u, k); }, []);
 
-  const resolveUser = useCallback(async (authUser: User): Promise<AuthUser | null> => {
+  const resolveUser = useCallback(async (authUser: User): Promise<{ user: AuthUser | null; serverError: boolean }> => {
     const check = await serverCheckAllowed(authUser.email || "");
-    if (!check.allowed) return null;
-    return { id: authUser.id, email: authUser.email || "", display_name: check.display_name || authUser.email?.split("@")[0] || "User", role: (check.role as "admin" | "user") || "user" };
+    if (!check.allowed) return { user: null, serverError: check.reason === "server_error" };
+    return { user: { id: authUser.id, email: authUser.email || "", display_name: check.display_name || authUser.email?.split("@")[0] || "User", role: (check.role as "admin" | "user") || "user" }, serverError: false };
   }, []);
 
   // Restore session on mount
@@ -53,10 +53,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const { data: { session } } = await sb.auth.getSession();
         if (cancelled) return;
         if (session?.user) {
-          const resolved = await resolveUser(session.user);
+          const { user: resolved, serverError } = await resolveUser(session.user);
           if (cancelled) return;
           if (resolved) setUser(resolved);
-          else { await sb.auth.signOut(); setUser(null); }
+          // Only destroy the session when the email is genuinely not allowed —
+          // a server/DB failure is transient; keep the session so login survives recovery
+          else if (!serverError) { await sb.auth.signOut(); setUser(null); }
         }
       } catch (e) { console.error("Auth init:", e); }
       if (!cancelled) setLoading(false);
@@ -69,8 +71,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (loggingOut) return;
       if (event === "SIGNED_OUT") { setUser(null); return; }
       if (session?.user) {
-        const resolved = await resolveUser(session.user);
-        setUser(resolved);
+        const { user: resolved, serverError } = await resolveUser(session.user);
+        if (resolved) setUser(resolved);
+        else if (!serverError) setUser(null);
       }
     });
 
@@ -81,14 +84,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!supabase) return { error: "Supabase not configured" };
 
     const check = await serverCheckAllowed(email.toLowerCase().trim());
-    if (!check.allowed) return { error: "Access denied. Email not authorized." };
+    if (!check.allowed) {
+      if (check.reason === "server_error") return { error: "Server error — database not reachable. Open /api/auth/check for details." };
+      return { error: "Access denied. Email not authorized." };
+    }
 
     const { data, error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) return { error: "Invalid email or password." };
 
     if (data.user) {
-      const resolved = await resolveUser(data.user);
+      const { user: resolved, serverError } = await resolveUser(data.user);
       if (resolved) { setUser(resolved); return {}; }
+      if (serverError) return { error: "Server error — database not reachable. Open /api/auth/check for details." };
       return { error: "Access denied." };
     }
     return { error: "Login failed." };
