@@ -146,26 +146,34 @@ export function renderMaintenanceHtml(state: MaintenanceState): string {
 <title>${title} — ${brand}</title>
 <style>
   *{box-sizing:border-box;margin:0;padding:0}
-  html,body{min-height:100%}
   body{
-    font:16px/1.6 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
-    background:#0b0d12;color:#e8eaf2;display:flex;align-items:center;justify-content:center;
-    padding:24px;position:relative;overflow:hidden;
+    min-height:100dvh;display:flex;align-items:center;justify-content:center;
+    font:16px/1.65 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    background:
+      radial-gradient(60% 45% at 50% 0%, rgba(16,185,129,.12), transparent 65%),
+      radial-gradient(50% 40% at 85% 100%, rgba(59,130,246,.09), transparent 70%),
+      #05060b;
+    color:#eceef6;padding:24px;position:relative;overflow:hidden;
   }
-  .blob{position:absolute;border-radius:50%;filter:blur(90px);opacity:.3;pointer-events:none}
-  .b1{width:420px;height:420px;background:#10b981;top:-140px;left:-110px}
-  .b2{width:380px;height:380px;background:#3b82f6;bottom:-150px;right:-100px;opacity:.2}
+  .blob{position:absolute;border-radius:50%;filter:blur(100px);pointer-events:none}
+  .b1{width:460px;height:460px;background:rgba(16,185,129,.32);top:-160px;left:-120px}
+  .b2{width:420px;height:420px;background:rgba(59,130,246,.22);bottom:-170px;right:-110px}
   .card{
-    position:relative;max-width:480px;width:100%;text-align:center;
-    background:rgba(255,255,255,.045);border:1px solid rgba(255,255,255,.09);
-    border-radius:22px;padding:44px 32px;
-    box-shadow:0 24px 70px rgba(0,0,0,.45);
+    position:relative;max-width:520px;width:100%;text-align:center;
+    background:linear-gradient(160deg,rgba(255,255,255,.08),rgba(255,255,255,.02) 40%,rgba(255,255,255,.045));
+    border:1px solid rgba(255,255,255,.11);
+    border-radius:26px;padding:56px 40px 48px;
+    backdrop-filter:blur(18px) saturate(1.3);-webkit-backdrop-filter:blur(18px) saturate(1.3);
+    box-shadow:0 1px 0 rgba(255,255,255,.14) inset,0 -1px 0 rgba(255,255,255,.04) inset,0 34px 90px rgba(0,0,0,.55);
   }
-  .brand{font-weight:700;letter-spacing:.14em;text-transform:uppercase;font-size:.78rem;color:#9aa3b8;margin-bottom:18px}
-  .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#f6b35c;margin-right:8px;animation:pulse 1.6s ease-in-out infinite}
-  @keyframes pulse{0%,100%{opacity:.45}50%{opacity:1}}
-  h1{font-size:1.55rem;line-height:1.25;margin-bottom:12px}
-  p.msg{color:#b9c0d2;font-size:.98rem}
+  .brand{display:inline-flex;align-items:center;gap:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;font-size:.76rem;color:#9aa3b8;margin-bottom:22px}
+  .dot{width:8px;height:8px;border-radius:50%;background:#f6b35c;box-shadow:0 0 14px rgba(246,179,92,.8);animation:pulse 1.8s ease-in-out infinite}
+  @keyframes pulse{0%,100%{opacity:.4;transform:scale(.85)}50%{opacity:1;transform:scale(1)}}
+  @media (prefers-reduced-motion: reduce){.dot{animation:none}}
+  h1{font-size:clamp(1.9rem,5vw,2.5rem);line-height:1.18;letter-spacing:-.015em;margin-bottom:14px;font-weight:800;
+    background:linear-gradient(100deg,#eceef6 20%,#6ee7b7 55%,#93c5fd 90%);
+    -webkit-background-clip:text;background-clip:text;color:transparent}
+  p.msg{color:#b3bacd;font-size:1.02rem;max-width:40ch;margin:0 auto}
 </style>
 </head>
 <body>
