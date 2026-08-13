@@ -30,11 +30,13 @@ async function serverCheckAllowed(email: string): Promise<{ allowed: boolean; re
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [loggingOut, setLoggingOut] = useState(false);
-
   const supabase = useMemo(() => { const u = process.env.NEXT_PUBLIC_SUPABASE_URL, k = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY; if (!u || !k) return null; return createClient(u, k); }, []);
+
+  const [user, setUser] = useState<AuthUser | null>(null);
+  // Without a configured client there is no session to restore, so we are not
+  // "loading" at all — deciding that here avoids a setState during the effect.
+  const [loading, setLoading] = useState(() => !!supabase);
+  const [loggingOut, setLoggingOut] = useState(false);
 
   const resolveUser = useCallback(async (authUser: User): Promise<{ user: AuthUser | null; serverError: boolean }> => {
     const check = await serverCheckAllowed(authUser.email || "");
@@ -44,7 +46,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Restore session on mount
   useEffect(() => {
-    if (!supabase) { setLoading(false); return; }
+    if (!supabase) return;
     const sb = supabase;
     let cancelled = false;
 

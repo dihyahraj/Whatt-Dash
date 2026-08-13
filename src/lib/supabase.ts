@@ -14,9 +14,12 @@ export function getSupabase(): SupabaseClient {
   return _supabase;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+/**
+ * Lazy façade so modules can `import { supabase }` at top level without
+ * constructing the client (and reading env vars) at import time.
+ */
 export const supabase = new Proxy({} as SupabaseClient, {
-  get(_, prop) {
-    return (getSupabase() as any)[prop];
+  get(_target, prop) {
+    return Reflect.get(getSupabase(), prop);
   },
 });

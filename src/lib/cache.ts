@@ -6,6 +6,11 @@
 // (images/videos/audio) — those stay on Supabase and are fetched
 // on demand. Cache persists across sessions and is scoped per
 // user so a shared browser doesn't leak chats between accounts.
+//
+// Writes are debounced by the caller (see the dashboard's cache
+// effects): the previous version re-read, re-sorted and re-wrote
+// every cached message of the open chat on every poll, which on a
+// busy chat meant continuous IndexedDB churn on the main thread.
 // ============================================================
 
 import type { ConversationWithLastMessage, Message } from "@/lib/types";
@@ -18,6 +23,8 @@ const STORE_MSGS = "messages"; // key: `${scope}:${cid}` -> Message[] (chronolog
 // Keep at most this many messages per conversation in cache.
 // Older ones are re-fetched from the server on demand (scroll up).
 const MAX_CACHED_PER_CONVO = 300;
+// The sidebar only ever shows the first pages; caching more is wasted work.
+const MAX_CACHED_CONVOS = 100;
 
 let dbPromise: Promise<IDBDatabase> | null = null;
 
@@ -46,9 +53,28 @@ function idbGet<T>(store: string, key: string): Promise<T | null> {
           const req = tx.objectStore(store).get(key);
           req.onsuccess = () => resolve((req.result ?? null) as T | null);
           req.onerror = () => reject(req.error);
-        })
+        }),
     )
     .catch(() => null);
+}
+
+/**
+ * Run a cache write off the critical path. Persisting is never urgent, but
+ * structured-cloning an array of messages happens on the main thread, so doing it
+ * while the browser is idle keeps it out of scroll and typing frames.
+ */
+type Scheduler = { postTask?: (cb: () => void, opts?: { priority?: string }) => Promise<unknown> };
+function whenIdle(fn: () => void): void {
+  const scheduler = (globalThis as { scheduler?: Scheduler }).scheduler;
+  if (scheduler?.postTask) {
+    void scheduler.postTask(fn, { priority: "background" });
+    return;
+  }
+  if (typeof requestIdleCallback === "function") {
+    requestIdleCallback(fn, { timeout: 2_000 });
+    return;
+  }
+  setTimeout(fn, 0);
 }
 
 function idbSet(store: string, key: string, val: unknown): Promise<void> {
@@ -60,7 +86,7 @@ function idbSet(store: string, key: string, val: unknown): Promise<void> {
           tx.objectStore(store).put(val, key);
           tx.oncomplete = () => resolve();
           tx.onerror = () => reject(tx.error);
-        })
+        }),
     )
     .catch(() => {});
 }
@@ -71,8 +97,11 @@ export function getCachedConversations(scope: string): Promise<ConversationWithL
   return idbGet<ConversationWithLastMessage[]>(STORE_CONV, `conv:${scope}`);
 }
 
-export function setCachedConversations(scope: string, list: ConversationWithLastMessage[]): Promise<void> {
-  return idbSet(STORE_CONV, `conv:${scope}`, list);
+export function setCachedConversations(scope: string, list: ConversationWithLastMessage[]): void {
+  const snapshot = list.slice(0, MAX_CACHED_CONVOS);
+  whenIdle(() => {
+    void idbSet(STORE_CONV, `conv:${scope}`, snapshot);
+  });
 }
 
 /* ── Messages ── */
@@ -87,31 +116,14 @@ export function getCachedMessages(scope: string, cid: string): Promise<Message[]
   return idbGet<Message[]>(STORE_MSGS, `${scope}:${cid}`);
 }
 
-export function setCachedMessages(scope: string, cid: string, msgs: Message[]): Promise<void> {
-  const capped = clean(msgs).slice(-MAX_CACHED_PER_CONVO);
-  return idbSet(STORE_MSGS, `${scope}:${cid}`, capped);
+export function setCachedMessages(scope: string, cid: string, msgs: Message[]): void {
+  const snapshot = clean(msgs).slice(-MAX_CACHED_PER_CONVO);
+  whenIdle(() => {
+    void idbSet(STORE_MSGS, `${scope}:${cid}`, snapshot);
+  });
 }
 
-// Merge incoming records into the cached list (upsert by id, newest
-// server data wins), keep chronological order, cap length.
-export async function mergeCachedMessages(scope: string, cid: string, incoming: Message[]): Promise<void> {
-  const existing = (await getCachedMessages(scope, cid)) || [];
-  const map = new Map<string, Message>();
-  for (const m of clean(existing)) map.set(m.id, m);
-  for (const m of clean(incoming)) map.set(m.id, m); // incoming overrides
-  const merged = Array.from(map.values()).sort(
-    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-  );
-  await setCachedMessages(scope, cid, merged);
-}
-
-// Upsert a single message (used by realtime insert/update).
-export async function upsertCachedMessage(scope: string, cid: string, msg: Message): Promise<void> {
-  if (!msg || String(msg.id).startsWith("temp_")) return;
-  await mergeCachedMessages(scope, cid, [msg]);
-}
-
-// Optional: wipe everything (e.g. call on logout from a shared device).
+/** Wipe everything (e.g. on logout from a shared device). */
 export async function clearCache(): Promise<void> {
   try {
     const db = await openDB();

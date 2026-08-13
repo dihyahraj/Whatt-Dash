@@ -21,7 +21,8 @@ export interface Conversation {
   id: string;
   phone: string;
   name: string | null;
-  profile_pic_url: string | null;
+  /** Not selected by the list API (nothing renders it) — kept for the DB column. */
+  profile_pic_url?: string | null;
   is_pinned: boolean;
   is_muted: boolean;
   is_archived: boolean;

@@ -153,7 +153,11 @@ audio::-webkit-media-controls-panel { background: var(--surface-2); border-radiu
 @keyframes modalIn { from { opacity: 0; transform: scale(0.94); } to { opacity: 1; transform: scale(1); } }
 @keyframes overlayIn { from { opacity: 0; } to { opacity: 1; } }
 
+@keyframes rise { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
+
 .anim-fade-up { animation: fadeUp 0.25s cubic-bezier(0.16, 1, 0.3, 1); }
+/* Login card entrance — pure CSS so the page doesn't need a "mounted" state. */
+.anim-rise { animation: rise 0.7s cubic-bezier(0.16, 1, 0.3, 1) both; }
 .anim-fade-in { animation: fadeIn 0.2s ease-out; }
 .anim-scale-in { animation: scaleIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) both; }
 .anim-slide-left { animation: slideInLeft 0.25s cubic-bezier(0.16, 1, 0.3, 1); }
@@ -168,8 +172,15 @@ audio::-webkit-media-controls-panel { background: var(--surface-2); border-radiu
 .anim-modal { animation: modalIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) both; }
 .anim-overlay { animation: overlayIn 0.25s ease both; }
 
-/* Transition base */
-.tr { transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1); }
+/* Transition base — named properties, never `all`.
+   `transition: all` made the browser check EVERY animatable property on every
+   style change for every element carrying this class (hundreds of them: rows,
+   bubbles, buttons), which showed up as scroll and hover jank. */
+.tr {
+  transition-property: background-color, color, border-color, box-shadow, opacity, transform, filter;
+  transition-duration: 0.15s;
+  transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+}
 
 /* Placeholder */
 input::placeholder, textarea::placeholder { color: var(--text-4); }

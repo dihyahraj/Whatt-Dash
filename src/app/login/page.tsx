@@ -10,16 +10,13 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [showPw, setShowPw] = useState(false);
-  const [mounted, setMounted] = useState(false);
 
   // MFA
   const [mfaStep, setMfaStep] = useState(false);
   const [factorId, setFactorId] = useState("");
   const [mfaCode, setMfaCode] = useState(["","","","","",""]);
   const mfaRefs = useRef<(HTMLInputElement|null)[]>([]);
-  const checkingMfa = useRef(false);
 
-  useEffect(() => { setMounted(true); }, []);
   useEffect(() => {
     const t = (localStorage.getItem("wd-theme") as string) || "dark";
     if (t === "system") { const d = window.matchMedia("(prefers-color-scheme: dark)").matches; document.documentElement.setAttribute("data-theme", d ? "dark" : "light"); }
@@ -27,19 +24,24 @@ export default function LoginPage() {
   }, []);
 
   const hasSession = typeof window !== "undefined" && Object.keys(localStorage).some(k => k.startsWith("sb-"));
-  // Don't redirect if MFA check is in progress or MFA code screen is showing
-  if (!loading && user && hasSession && !checkingMfa.current && !mfaStep) { window.location.href = "/"; return null; }
+  // Already signed in → go to the dashboard. `busy` covers the window between a
+  // successful signIn() and the MFA check, and `mfaStep` covers the code screen,
+  // so neither gets redirected away mid-flow.
+  const shouldRedirect = !loading && !busy && !mfaStep && !!user && hasSession;
+  useEffect(() => {
+    // Navigating is a side effect: it belongs in an effect, not in render.
+    if (shouldRedirect) window.location.replace("/");
+  }, [shouldRedirect]);
+  if (shouldRedirect) return null;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!email || !password) { setError("Email and password required"); return; }
     setError(""); setBusy(true);
     
-    // Block auto-redirect while we check MFA
-    checkingMfa.current = true;
     
     const { error: err } = await signIn(email.trim(), password);
-    if (err) { setError(err); setBusy(false); checkingMfa.current = false; return; }
+    if (err) { setError(err); setBusy(false); return; }
 
     // Check if user has MFA enrolled
     if (supabase) {
@@ -50,15 +52,15 @@ export default function LoginPage() {
           setFactorId(totp.id);
           setMfaStep(true);
           setBusy(false);
-          checkingMfa.current = false;
+         
           setTimeout(() => mfaRefs.current[0]?.focus(), 100);
           return;
         }
       } catch { /* no MFA */ }
     }
 
-    checkingMfa.current = false;
-    window.location.href = "/";
+   
+    window.location.assign("/");
   }
 
   async function verifyMfa() {
@@ -70,7 +72,7 @@ export default function LoginPage() {
       if (cErr || !challenge) { setError("Challenge failed"); setBusy(false); return; }
       const { error: vErr } = await supabase.auth.mfa.verify({ factorId, challengeId: challenge.id, code });
       if (vErr) { setError("Invalid code. Try again."); setBusy(false); setMfaCode(["","","","","",""]); mfaRefs.current[0]?.focus(); return; }
-      window.location.href = "/";
+      window.location.assign("/");
     } catch (e) { setError(String(e)); setBusy(false); }
   }
 
@@ -100,7 +102,7 @@ export default function LoginPage() {
       if (cE || !ch) { setError("Challenge failed"); setBusy(false); return; }
       const { error: vE } = await supabase.auth.mfa.verify({ factorId, challengeId: ch.id, code });
       if (vE) { setError("Invalid code"); setBusy(false); setMfaCode(["","","","","",""]); mfaRefs.current[0]?.focus(); return; }
-      window.location.href = "/";
+      window.location.assign("/");
     } catch { setBusy(false); }
   }
 
@@ -125,7 +127,8 @@ export default function LoginPage() {
         <div className="absolute inset-0 opacity-[0.03]" style={{ backgroundImage: "linear-gradient(var(--text-4) 1px, transparent 1px), linear-gradient(90deg, var(--text-4) 1px, transparent 1px)", backgroundSize: "60px 60px" }}/>
       </div>
 
-      <div className={`relative w-full max-w-[420px] transition-all duration-700 ${mounted ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"}`}>
+      {/* Entrance handled by CSS (see .anim-rise) — no mount-flag state, no second render. */}
+      <div className="relative w-full max-w-[420px] anim-rise">
         <div className="rounded-3xl overflow-hidden" style={{ background: "var(--surface-1)", boxShadow: "var(--shadow-xl)", border: "1px solid var(--border)" }}>
           <div className="h-1" style={{ background: "linear-gradient(90deg, var(--primary), var(--primary-soft), #3b82f6)" }}/>
 
