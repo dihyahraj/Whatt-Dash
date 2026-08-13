@@ -216,15 +216,35 @@ async function ingestConversation(
 
   // ON CONFLICT DO NOTHING on the unique whatsapp_msg_id: a Meta retry inserts
   // nothing and returns nothing, so media is never downloaded twice.
-  const { data: inserted, error: insertError } = await supabase
+  let inserted: { id: string; whatsapp_msg_id: string | null }[] | null = null;
+  const { data: upserted, error: insertError } = await supabase
     .from("messages")
     .upsert(rows, { onConflict: "whatsapp_msg_id", ignoreDuplicates: true })
     .select("id, whatsapp_msg_id");
 
   if (insertError) {
-    console.error("Insert error:", insertError);
-    return [];
+    // The upsert needs a UNIQUE constraint on whatsapp_msg_id. It exists in the
+    // base schema, but a database built before that column was unique would fail
+    // here — and dropping inbound messages is not an acceptable failure mode. Fall
+    // back to inserting row by row and treat a duplicate key as "already stored".
+    console.error("Batch upsert failed, falling back to per-row insert:", insertError.message);
+    inserted = [];
+    for (const row of rows) {
+      const { data: one, error: oneError } = await supabase
+        .from("messages")
+        .insert(row)
+        .select("id, whatsapp_msg_id")
+        .single();
+      if (oneError) {
+        if (oneError.code !== "23505") console.error("Insert error:", oneError.message);
+        continue; // 23505 = duplicate delivery, nothing to do
+      }
+      if (one) inserted.push(one);
+    }
+  } else {
+    inserted = upserted;
   }
+
   if (!inserted?.length) return []; // pure duplicate delivery
 
   const last = rows[rows.length - 1];
