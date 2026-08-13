@@ -4,9 +4,23 @@ import { getSupabase } from "@/lib/supabase";
 // Server-side check if email is in allowed_users
 // Uses service role key — bypasses RLS
 // reason: "not_allowed" = email genuinely not in the list; "server_error" = DB/env failure, NOT an auth verdict
+/**
+ * Short-lived in-process memo. Every dashboard load asks this route the same
+ * question about the same handful of emails, and each miss is a database round
+ * trip on the critical path of the app's first paint. 30s of staleness on an
+ * allow-list that changes a few times a year is a good trade; a revoked user is
+ * locked out on the next window.
+ */
+const CACHE_TTL_MS = 30_000;
+const memo = new Map<string, { at: number; body: Record<string, unknown> }>();
+
 export async function POST(request: NextRequest) {
   const { email } = await request.json();
   if (!email) return Response.json({ allowed: false, reason: "not_allowed" });
+
+  const key = String(email).toLowerCase().trim();
+  const hit = memo.get(key);
+  if (hit && Date.now() - hit.at < CACHE_TTL_MS) return Response.json(hit.body);
 
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY || (!process.env.SUPABASE_INTERNAL_URL && !process.env.NEXT_PUBLIC_SUPABASE_URL)) {
     console.error("[auth/check] Supabase env vars missing (SUPABASE_SERVICE_ROLE_KEY / NEXT_PUBLIC_SUPABASE_URL)");
@@ -26,8 +40,15 @@ export async function POST(request: NextRequest) {
       console.error("[auth/check] allowed_users query failed:", error.code, error.message);
       return Response.json({ allowed: false, reason: "server_error" });
     }
-    if (!data) return Response.json({ allowed: false, reason: "not_allowed" });
-    return Response.json({ allowed: true, display_name: data.display_name, role: data.role });
+    // Only definite answers are cached — never a transient server_error.
+    if (!data) {
+      const body = { allowed: false, reason: "not_allowed" };
+      memo.set(key, { at: Date.now(), body });
+      return Response.json(body);
+    }
+    const body = { allowed: true, display_name: data.display_name, role: data.role };
+    memo.set(key, { at: Date.now(), body });
+    return Response.json(body);
   } catch (e) {
     console.error("[auth/check] Supabase unreachable:", e instanceof Error ? e.message : e);
     return Response.json({ allowed: false, reason: "server_error" });

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useAuth } from "@/components/AuthProvider";
+import { getSupabaseClient, useAuth } from "@/components/AuthProvider";
 
 export default function LoginPage() {
   const { signIn, user, loading, supabase } = useAuth();
@@ -43,10 +43,12 @@ export default function LoginPage() {
     const { error: err } = await signIn(email.trim(), password);
     if (err) { setError(err); setBusy(false); return; }
 
-    // Check if user has MFA enrolled
-    if (supabase) {
+    // Check if user has MFA enrolled. Awaits the client so a fast submit can't
+    // race the lazily-loaded supabase chunk and skip the MFA screen.
+    const client = await getSupabaseClient();
+    if (client) {
       try {
-        const { data: factors } = await supabase.auth.mfa.listFactors();
+        const { data: factors } = await client.auth.mfa.listFactors();
         const totp = factors?.totp?.find(f => f.status === "verified");
         if (totp) {
           setFactorId(totp.id);
