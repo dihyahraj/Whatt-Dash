@@ -151,6 +151,7 @@ export default function Dashboard() {
   const convosRef = useRef<ConversationWithLastMessage[]>([]);
   const filterRef = useRef("all");
   const queryRef = useRef("");
+  const nextCursor = useRef<string | null>(null);
   const loadingMoreConvos = useRef(false);
 
   // Mirrors of the two big lists for async callbacks (polling, realtime, request
@@ -181,10 +182,16 @@ export default function Dashboard() {
   }, []);
 
   /* ═══ CONVERSATION LIST ═══ */
+  // Keyset cursor, not an offset: the list is ordered by updated_at, which moves
+  // whenever a message arrives, so an offset would serve some chats twice and
+  // never serve the ones they displaced.
   const listUrl = useCallback(
-    (offset: number) => {
-      const p = new URLSearchParams({ limit: String(PAGE_SIZE), offset: String(offset), filter });
+    (cursor: string | null) => {
+      const p = new URLSearchParams({ limit: String(PAGE_SIZE), filter });
+      if (cursor) p.set("cursor", cursor);
       if (query) p.set("q", query);
+      // Search mode pages by offset server-side; keyset applies to the plain list.
+      if (query && cursor) p.set("offset", String(convosRef.current.length));
       return `/api/conversations?${p}`;
     },
     [filter, query],
@@ -194,10 +201,12 @@ export default function Dashboard() {
   const loadFirstPage = useCallback(
     async (mode: "replace" | "merge") => {
       try {
-        const r = await fetch(listUrl(0));
+        const r = await fetch(listUrl(null));
         const d = await r.json();
         if (!Array.isArray(d?.items)) return;
         setHasMoreConvos(!!d.hasMore);
+        // A background refresh must not rewind a cursor the user has scrolled past.
+        if (mode === "replace") nextCursor.current = d.nextCursor ?? null;
         setConvos((prev) => {
           const next = mode === "replace" ? sortConvos(d.items) : mergeConvos(prev, d.items);
           return convosSig(prev) === convosSig(next) ? prev : next;
@@ -213,12 +222,17 @@ export default function Dashboard() {
 
   const loadMoreConvos = useCallback(async () => {
     if (loadingMoreConvos.current || !hasMoreConvos) return;
+    // Fall back to the oldest row we hold if the server didn't hand back a cursor.
+    const cursor =
+      nextCursor.current || convosRef.current[convosRef.current.length - 1]?.updated_at || null;
+    if (!cursor) return;
     loadingMoreConvos.current = true;
     try {
-      const r = await fetch(listUrl(convosRef.current.length));
+      const r = await fetch(listUrl(cursor));
       const d = await r.json();
       if (Array.isArray(d?.items)) {
         setHasMoreConvos(!!d.hasMore);
+        nextCursor.current = d.nextCursor ?? null;
         setConvos((prev) => mergeConvos(prev, d.items));
       }
     } catch {
@@ -330,13 +344,18 @@ export default function Dashboard() {
 
   const loadOlderMsgs = useCallback(async () => {
     const id = selIdRef.current;
-    const oldest = msgsRef.current[0]?.created_at;
+    const oldest = msgsRef.current[0];
     if (!id || !oldest || loadingMore) return;
     setLoadingMore(true);
     try {
-      const r = await fetch(
-        `/api/conversations/${id}/messages?limit=${MSG_PAGE}&before=${encodeURIComponent(oldest)}`,
-      );
+      // (created_at, id) cursor — messages inserted in one webhook batch share a
+      // timestamp, so a timestamp-only cursor would skip all but the first.
+      const p = new URLSearchParams({
+        limit: String(MSG_PAGE),
+        before: oldest.created_at,
+        beforeId: oldest.id,
+      });
+      const r = await fetch(`/api/conversations/${id}/messages?${p}`);
       const d = await r.json();
       if (Array.isArray(d)) {
         if (d.length < MSG_PAGE) setHasMoreMsgs(false);
@@ -352,10 +371,15 @@ export default function Dashboard() {
   /** Delta poll: only messages newer than the newest one we hold. */
   const fetchNewMsgs = useCallback(async (id: string) => {
     const known = msgsRef.current.filter((m) => !m.id.startsWith("temp_"));
-    const after = known[known.length - 1]?.created_at;
-    if (!after) return;
+    const newest = known[known.length - 1];
+    if (!newest) return;
     try {
-      const r = await fetch(`/api/conversations/${id}/messages?after=${encodeURIComponent(after)}&limit=100`);
+      const p = new URLSearchParams({
+        limit: "100",
+        after: newest.created_at,
+        afterId: newest.id,
+      });
+      const r = await fetch(`/api/conversations/${id}/messages?${p}`);
       const d = await r.json();
       if (!Array.isArray(d) || !d.length || selIdRef.current !== id) return;
       setMsgs((prev) => {
@@ -376,44 +400,61 @@ export default function Dashboard() {
     beep();
   }, []);
 
+  /** Apply one conversation row from a realtime payload to the sidebar. */
+  const patchConvo = useCallback(
+    (row: ConversationWithLastMessage) => {
+      if (!row?.id) return;
+      const known = convosRef.current.find((c) => c.id === row.id);
+
+      if (row.is_archived) {
+        if (known) setConvos((prev) => prev.filter((c) => c.id !== row.id));
+        return;
+      }
+
+      // New incoming message in a chat that isn't open → notify from this payload.
+      // (No extra subscription needed: the denormalized conversation row already
+      // carries the sender and the preview text.)
+      if (
+        row.last_message_role === "user" &&
+        row.id !== selIdRef.current &&
+        !row.is_muted &&
+        (row.unread_count || 0) > (known?.unread_count || 0)
+      ) {
+        notify(row.name || row.phone || "New Message", (row.last_message || "New message").slice(0, 100), row.id);
+      }
+
+      if (known) {
+        // Keep labels: the realtime payload doesn't carry the join.
+        setConvos((prev) => sortConvos(prev.map((c) => (c.id === row.id ? { ...c, ...row, labels: c.labels } : c))));
+      } else if (filterRef.current === "all" && !queryRef.current) {
+        // A brand-new chat only belongs at the top of an unfiltered list.
+        setConvos((prev) => sortConvos([{ ...row, labels: [] }, ...prev]));
+      }
+    },
+    [notify],
+  );
+
   // Sidebar: patched straight from the payload. The old code called a full
-  // conversation-list refetch on every single realtime event.
+  // conversation-list refetch on every single realtime event — with N tabs open
+  // that turned one inbound message into N full list queries.
   useEffect(() => {
     if (!supabase) return;
+    const table = { schema: "public", table: "conversations" } as const;
+    // INSERT/UPDATE are filtered server-side: archived chats are never in the
+    // sidebar, so their events shouldn't be delivered (and billed) to every tab.
+    // DELETE is left unfiltered on purpose — Postgres only sends the primary key
+    // for deletes, so a filter on any other column would drop the event.
     const channel = supabase
       .channel("wd-convos")
-      .on("postgres_changes", { event: "*", schema: "public", table: "conversations" }, (p) => {
-        if (p.eventType === "DELETE") {
-          const goneId = (p.old as { id?: string })?.id;
-          if (goneId) setConvos((prev) => prev.filter((c) => c.id !== goneId));
-          return;
-        }
-        const row = p.new as ConversationWithLastMessage;
-        if (!row?.id) return;
-
-        const known = convosRef.current.find((c) => c.id === row.id);
-        if (row.is_archived) {
-          if (known) setConvos((prev) => prev.filter((c) => c.id !== row.id));
-          return;
-        }
-
-        // New incoming message in a chat that isn't open → notify from this payload.
-        if (
-          row.last_message_role === "user" &&
-          row.id !== selIdRef.current &&
-          !row.is_muted &&
-          (row.unread_count || 0) > (known?.unread_count || 0)
-        ) {
-          notify(row.name || row.phone || "New Message", (row.last_message || "New message").slice(0, 100), row.id);
-        }
-
-        if (known) {
-          // Keep labels: the realtime payload doesn't carry the join.
-          setConvos((prev) => sortConvos(prev.map((c) => (c.id === row.id ? { ...c, ...row, labels: c.labels } : c))));
-        } else if (filterRef.current === "all" && !queryRef.current) {
-          // A brand-new chat only belongs at the top of an unfiltered list.
-          setConvos((prev) => sortConvos([{ ...row, labels: [] }, ...prev]));
-        }
+      .on("postgres_changes", { event: "INSERT", ...table, filter: "is_archived=eq.false" }, (p) =>
+        patchConvo(p.new as ConversationWithLastMessage),
+      )
+      .on("postgres_changes", { event: "UPDATE", ...table, filter: "is_archived=eq.false" }, (p) =>
+        patchConvo(p.new as ConversationWithLastMessage),
+      )
+      .on("postgres_changes", { event: "DELETE", ...table }, (p) => {
+        const goneId = (p.old as { id?: string })?.id;
+        if (goneId) setConvos((prev) => prev.filter((c) => c.id !== goneId));
       })
       .subscribe();
     return () => {
@@ -421,7 +462,7 @@ export default function Dashboard() {
     };
     // Deliberately NOT keyed on filter/query — those are read through refs so
     // typing in the search box doesn't tear down and re-open the subscription.
-  }, [supabase, notify]);
+  }, [supabase, patchConvo]);
 
   // Messages: scoped to the OPEN chat only, instead of every row in the table.
   useEffect(() => {

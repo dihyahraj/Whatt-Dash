@@ -81,9 +81,13 @@ export const Sidebar = memo(function Sidebar({
   const [showArchived, setShowArchived] = useState(false);
   const listRef = useRef<HTMLDivElement>(null);
 
-  // Debounced: one request per pause in typing, not one per keystroke.
+  // Debounced: one request per pause in typing, not one per keystroke. A single
+  // character is also skipped — an ILIKE '%a%' can't use the trigram index and
+  // degrades into a scan for a result set nobody wants.
   useEffect(() => {
-    const t = setTimeout(() => onQueryChange(search.trim()), 280);
+    const q = search.trim();
+    if (q.length === 1) return;
+    const t = setTimeout(() => onQueryChange(q), 280);
     return () => clearTimeout(t);
   }, [search, onQueryChange]);
 

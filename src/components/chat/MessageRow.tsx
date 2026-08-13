@@ -6,10 +6,18 @@ import { dl, mt } from "@/lib/format";
 import { VoicePlayer } from "./VoicePlayer";
 import { Sym } from "./ui";
 
-/* Set to true ONLY if your Supabase project is on a plan with Image
-   Transformations (Pro+). It shows a tiny (~few KB) thumbnail instead of
-   the plain placeholder. Falls back to the placeholder automatically if a
-   thumbnail fails to load. Default false = zero download until you tap. */
+/* Shows a tiny (~few KB) blurred thumbnail behind the placeholder instead of a
+   plain box, using Supabase's image-transform endpoint.
+
+   Left OFF deliberately, and not just because it needs Pro+: transformations are
+   billed per DISTINCT ORIGIN IMAGE per billing cycle (quota 100/month on Pro,
+   then $5 per 1,000). A WhatsApp inbox produces an unbounded stream of new
+   images, so the cost grows with inbound media forever and never amortizes.
+   If you want thumbnails, generate one derivative at ingest time in
+   lib/media-storage.ts and store it as a second object — one-time cost, fully
+   CDN-cacheable, works on any plan.
+
+   Default false = zero image bytes downloaded until someone taps. */
 const IMG_THUMBNAILS = false;
 
 const QUICK_REACT = ["👍", "❤️", "😂", "😮", "😢", "🙏", "🔥", "🎉"];

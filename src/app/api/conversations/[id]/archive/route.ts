@@ -8,10 +8,12 @@ export async function POST(
   const { id } = await params;
   const { archived } = await request.json();
 
+  // No-op toggles must not write (see the note in pin/route.ts).
   const { error } = await supabase
     .from("conversations")
     .update({ is_archived: archived })
-    .eq("id", id);
+    .eq("id", id)
+    .neq("is_archived", archived);
 
   if (error) {
     return Response.json({ error: error.message }, { status: 500 });

@@ -21,15 +21,20 @@ export async function GET(request: NextRequest) {
   const sp = request.nextUrl.searchParams;
   const parsedLimit = parseInt(sp.get("limit") || "", 10);
   const limit = Math.min(Math.max(Number.isFinite(parsedLimit) ? parsedLimit : DEFAULT_LIMIT, 1), MAX_LIMIT);
-  const parsedOffset = parseInt(sp.get("offset") || "", 10);
-  const offset = Math.max(Number.isFinite(parsedOffset) ? parsedOffset : 0, 0);
+  const cursor = sp.get("cursor");
 
-  const { data, error } = await getSupabase()
+  // Keyset, like the main list — an archived chat can still be bumped by an
+  // inbound message, which would make OFFSET skip rows.
+  let query = getSupabase()
     .from("conversations")
     .select(COLS)
     .eq("is_archived", true)
     .order("updated_at", { ascending: false })
-    .range(offset, offset + limit);
+    .order("id", { ascending: false })
+    .limit(limit + 1);
+  if (cursor) query = query.lt("updated_at", cursor);
+
+  const { data, error } = await query;
 
   if (error) {
     return Response.json({ error: error.message }, { status: 500, headers: { "cache-control": "no-store" } });
@@ -47,5 +52,8 @@ export async function GET(request: NextRequest) {
     labels: [],
   }));
 
-  return Response.json({ items, hasMore }, { headers: { "cache-control": "no-store" } });
+  return Response.json(
+    { items, hasMore, nextCursor: hasMore ? (items[items.length - 1]?.updated_at ?? null) : null },
+    { headers: { "cache-control": "no-store" } },
+  );
 }

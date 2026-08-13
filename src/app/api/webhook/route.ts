@@ -228,18 +228,32 @@ async function ingestConversation(
   if (!inserted?.length) return []; // pure duplicate delivery
 
   const last = rows[rows.length - 1];
-  const now = new Date().toISOString();
-  await supabase
-    .from("conversations")
-    .update({
-      updated_at: now,
-      unread_count: (conversation.unread_count || 0) + inserted.length,
-      last_message: last.content,
-      last_message_type: last.message_type || "text",
-      last_message_role: "user",
-      last_message_time: now,
-    })
-    .eq("id", conversation.id);
+
+  // Atomic increment in SQL. Reading unread_count and adding to it in JS loses
+  // increments when two inbound webhooks for the same chat overlap (which Meta's
+  // retries make likely). Falls back to the old read-modify-write if the
+  // migration that adds the function hasn't been applied yet.
+  const { error: bumpError } = await supabase.rpc("bump_conversation_inbound", {
+    p_id: conversation.id,
+    p_count: inserted.length,
+    p_last_message: last.content,
+    p_last_message_type: last.message_type || "text",
+  });
+
+  if (bumpError) {
+    const now = new Date().toISOString();
+    await supabase
+      .from("conversations")
+      .update({
+        updated_at: now,
+        unread_count: (conversation.unread_count || 0) + inserted.length,
+        last_message: last.content,
+        last_message_type: last.message_type || "text",
+        last_message_role: "user",
+        last_message_time: now,
+      })
+      .eq("id", conversation.id);
+  }
 
   const jobs: MediaJob[] = [];
   for (const row of inserted) {

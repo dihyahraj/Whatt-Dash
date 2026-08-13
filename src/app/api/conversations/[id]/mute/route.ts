@@ -8,10 +8,12 @@ export async function POST(
   const { id } = await params;
   const { muted } = await request.json();
 
+  // No-op toggles must not write (see the note in pin/route.ts).
   const { error } = await supabase
     .from("conversations")
     .update({ is_muted: muted })
-    .eq("id", id);
+    .eq("id", id)
+    .neq("is_muted", muted);
 
   if (error) {
     return Response.json({ error: error.message }, { status: 500 });

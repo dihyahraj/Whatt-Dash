@@ -6,10 +6,12 @@ export function getSupabase(): SupabaseClient {
   if (!_supabase) {
     // Use internal URL for server-side (Docker network), fallback to public URL
     const url = process.env.SUPABASE_INTERNAL_URL || process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    _supabase = createClient(
-      url,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
-    );
+    _supabase = createClient(url, process.env.SUPABASE_SERVICE_ROLE_KEY!, {
+      // Server-side, service-role client: it must never try to manage or persist
+      // a user session. Reusing one instance also reuses keep-alive sockets to
+      // PostgREST (this client holds no per-request state).
+      auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
+    });
   }
   return _supabase;
 }

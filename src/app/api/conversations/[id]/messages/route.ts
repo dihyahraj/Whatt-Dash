@@ -2,15 +2,19 @@ import { NextRequest } from "next/server";
 import { getSupabase } from "@/lib/supabase";
 
 /**
- * Messages for one conversation.
+ * Messages for one conversation, keyset-paginated.
  *
- *   before=<iso>  older page (scroll up) — newest-first window, returned ascending
- *   after=<iso>   delta: ONLY messages newer than this. The dashboard's polling
- *                 safety net uses it, so a quiet chat costs an empty array
- *                 instead of re-downloading the last 50 rows every few seconds.
+ *   before=<iso>&beforeId=<uuid>  older page (scroll up)
+ *   after=<iso>&afterId=<uuid>    delta: only messages newer than the cursor
  *
- * Backed by the (conversation_id, created_at DESC) composite index added in
- * supabase-perf-v2-migration.sql.
+ * The id is part of the cursor, not decoration. A webhook batch inserts several
+ * rows in one transaction, so they share `created_at` down to the microsecond —
+ * a timestamp-only cursor skips every row after the first of each tie and can
+ * never recover them. Ordering is (created_at, id) throughout, matching the
+ * idx_messages_convo_created_id index from supabase-perf-v2-migration.sql.
+ *
+ * The delta form is what the dashboard's polling safety net uses, so a quiet chat
+ * costs an empty array instead of re-downloading the last 50 rows.
  */
 
 // Explicit columns — `select *` shipped columns the UI never reads.
@@ -20,13 +24,21 @@ const COLS =
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
 
+/** PostgREST has no row-constructor comparison, so (ts, id) < (a, b) is spelled out. */
+function keysetFilter(ts: string, id: string | null, direction: "lt" | "gt"): string {
+  if (!id) return `created_at.${direction}.${ts}`;
+  return `created_at.${direction}.${ts},and(created_at.eq.${ts},id.${direction}.${id})`;
+}
+
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const sp = request.nextUrl.searchParams;
   const parsed = parseInt(sp.get("limit") || "", 10);
   const limit = Math.min(Math.max(Number.isFinite(parsed) ? parsed : DEFAULT_LIMIT, 1), MAX_LIMIT);
   const before = sp.get("before");
+  const beforeId = sp.get("beforeId");
   const after = sp.get("after");
+  const afterId = sp.get("afterId");
 
   const supabase = getSupabase();
 
@@ -37,8 +49,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       .from("messages")
       .select(COLS)
       .eq("conversation_id", id)
-      .gt("created_at", after)
+      .or(keysetFilter(after, afterId, "gt"))
       .order("created_at", { ascending: true })
+      .order("id", { ascending: true })
       .limit(limit);
     if (error) return json({ error: error.message }, 500);
     return json(data || []);
@@ -49,9 +62,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     .select(COLS)
     .eq("conversation_id", id)
     .order("created_at", { ascending: false })
+    .order("id", { ascending: false })
     .limit(limit);
 
-  if (before) query = query.lt("created_at", before);
+  if (before) query = query.or(keysetFilter(before, beforeId, "lt"));
 
   const { data, error } = await query;
   if (error) return json({ error: error.message }, 500);

@@ -8,10 +8,14 @@ export async function POST(
   const { id } = await params;
   const { pinned } = await request.json();
 
+  // `.neq` makes a redundant toggle a no-op: Postgres always writes a new row
+  // version for an UPDATE even when nothing changed, and every write fans out a
+  // Realtime event to every connected tab.
   const { error } = await supabase
     .from("conversations")
     .update({ is_pinned: pinned })
-    .eq("id", id);
+    .eq("id", id)
+    .neq("is_pinned", pinned);
 
   if (error) {
     return Response.json({ error: error.message }, { status: 500 });
