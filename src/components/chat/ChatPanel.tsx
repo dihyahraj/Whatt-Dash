@@ -21,6 +21,7 @@ export const ChatPanel = memo(function ChatPanel({
   sending,
   hasMore,
   loadingMore,
+  loadingFirstPage,
   onLoadOlder,
   onReachedBottom,
   onSend,
@@ -45,6 +46,7 @@ export const ChatPanel = memo(function ChatPanel({
   sending: boolean;
   hasMore: boolean;
   loadingMore: boolean;
+  loadingFirstPage: boolean;
   onLoadOlder: () => void;
   onReachedBottom: () => void;
   onSend: (text: string, replyTo: Message | null) => Promise<boolean>;
@@ -103,6 +105,7 @@ export const ChatPanel = memo(function ChatPanel({
         peerName={convo.name || convo.phone}
         hasMore={hasMore}
         loadingMore={loadingMore}
+        loadingFirstPage={loadingFirstPage}
         onLoadOlder={onLoadOlder}
         onReachedBottom={onReachedBottom}
         onReply={setReplyTo}

@@ -172,6 +172,36 @@ audio::-webkit-media-controls-panel { background: var(--surface-2); border-radiu
 .anim-modal { animation: modalIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) both; }
 .anim-overlay { animation: overlayIn 0.25s ease both; }
 
+/* ═══ Skeleton loading ═══
+   A sheen that slides across placeholder blocks. The animation is a `transform`,
+   so it runs on the compositor and costs nothing on the main thread — which is
+   the whole point of showing a skeleton in the first place. */
+:root { --sk-sheen: rgba(0,0,0,0.045); }
+[data-theme="dark"] { --sk-sheen: rgba(255,255,255,0.055); }
+
+@keyframes shimmer { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+
+.sk {
+  position: relative;
+  overflow: hidden;
+  background: var(--surface-3);
+  border-radius: 8px;
+}
+.sk::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, var(--sk-sheen), transparent);
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .sk::after { animation: none; }
+}
+
+/* Content replacing a skeleton fades in instead of snapping. */
+@keyframes contentIn { from { opacity: 0; } to { opacity: 1; } }
+.anim-content { animation: contentIn 0.18s ease-out both; }
+
 /* Transition base — named properties, never `all`.
    `transition: all` made the browser check EVERY animatable property on every
    style change for every element carrying this class (hundreds of them: rows,

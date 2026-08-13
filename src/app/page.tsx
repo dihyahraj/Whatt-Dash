@@ -8,6 +8,7 @@ import type { ConversationWithLastMessage, Label, Message, QuickReply } from "@/
 import { getCachedConversations, getCachedMessages, setCachedConversations, setCachedMessages } from "@/lib/cache";
 import { ChatPanel } from "@/components/chat/ChatPanel";
 import { Sidebar } from "@/components/chat/Sidebar";
+import { AppShellSkeleton } from "@/components/chat/Skeletons";
 import { ChatAction, Sym } from "@/components/chat/ui";
 
 // Rarely-opened surfaces stay out of the initial bundle.
@@ -35,6 +36,21 @@ const MSG_KEEP = 60;
 /** Safety net only — Realtime is the primary update path. */
 const POLL_MS = 30_000;
 const CACHE_DEBOUNCE_MS = 1_000;
+/**
+ * Realtime events are coalesced into one state update per window instead of one
+ * per event. A busy inbox delivers messages in bursts — every inbound message
+ * updates its conversation row, and each of those used to be its own setState,
+ * its own re-sort of the whole list and its own render. At 20 messages arriving
+ * together that was 20 renders; now it is one, and the ceiling is 5 per second
+ * no matter how much traffic comes in.
+ */
+const REALTIME_FLUSH_MS = 200;
+/**
+ * Loaded-conversation ceiling, applied when the reader scrolls back to the top.
+ * Without it the array (and the DOM) only grow as someone pages down, and every
+ * later realtime patch has to walk and re-sort that whole array.
+ */
+const CONVO_KEEP = 50;
 
 type Theme = "light" | "dark" | "system";
 
@@ -46,13 +62,33 @@ function sortConvos(list: ConversationWithLastMessage[]): ConversationWithLastMe
   );
 }
 
-/** Cheap signature so a poll that changed nothing doesn't re-render the list. */
-function convosSig(list: ConversationWithLastMessage[]): string {
-  let sig = "";
-  for (const c of list) {
-    sig += `${c.id}:${c.updated_at}:${c.unread_count}:${c.last_message}:${c.is_pinned ? 1 : 0}:${c.is_muted ? 1 : 0}:${c.labels?.length || 0}|`;
+/**
+ * Did anything the sidebar renders actually change?
+ *
+ * Compares field by field and bails on the first difference — no string building,
+ * no allocation. The previous version concatenated a signature string for every
+ * row on every poll, which meant allocating and throwing away a few KB of string
+ * several times a minute just to discover nothing had changed.
+ */
+function sameConvos(a: ConversationWithLastMessage[], b: ConversationWithLastMessage[]): boolean {
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i];
+    const y = b[i];
+    if (
+      x.id !== y.id ||
+      x.updated_at !== y.updated_at ||
+      x.unread_count !== y.unread_count ||
+      x.last_message !== y.last_message ||
+      !!x.is_pinned !== !!y.is_pinned ||
+      !!x.is_muted !== !!y.is_muted ||
+      (x.labels?.length || 0) !== (y.labels?.length || 0)
+    ) {
+      return false;
+    }
   }
-  return sig;
+  return true;
 }
 
 function mergeConvos(
@@ -164,6 +200,7 @@ export default function Dashboard() {
   const [msgs, setMsgs] = useState<Message[]>([]);
   const [hasMoreMsgs, setHasMoreMsgs] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [loadingMsgs, setLoadingMsgs] = useState(false);
   const [sending, setSendingState] = useState(false);
 
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -242,7 +279,7 @@ export default function Dashboard() {
         if (mode === "replace") nextCursor.current = d.nextCursor ?? null;
         setConvos((prev) => {
           const next = mode === "replace" ? sortConvos(d.items) : mergeConvos(prev, d.items);
-          return convosSig(prev) === convosSig(next) ? prev : next;
+          return sameConvos(prev, next) ? prev : next;
         });
       } catch {
         /* offline — cached list stays on screen */
@@ -359,9 +396,11 @@ export default function Dashboard() {
     const id = selId;
     setMsgs([]);
     setHasMoreMsgs(true);
+    setLoadingMsgs(true);
     getCachedMessages(scopeRef.current, id).then((cached) => {
       if (selIdRef.current === id && cached?.length) {
         setMsgs((prev) => (prev.length ? prev : cached.slice(-CACHE_HYDRATE)));
+        setLoadingMsgs(false);
       }
     });
     fetch(`/api/conversations/${id}/messages?limit=${MSG_PAGE}`)
@@ -371,7 +410,10 @@ export default function Dashboard() {
         setMsgs((prev) => mergeMessages(prev, d, MSG_KEEP));
         setHasMoreMsgs(d.length >= MSG_PAGE);
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => {
+        if (selIdRef.current === id) setLoadingMsgs(false);
+      });
     markRead(id);
   }, [selId, markRead]);
 
@@ -400,6 +442,18 @@ export default function Dashboard() {
       setLoadingMore(false);
     }
   }, [loadingMore]);
+
+  /**
+   * Back at the top of the sidebar: drop the pages scrolled past. Every realtime
+   * patch walks and re-sorts the loaded array, so letting it grow to hundreds of
+   * rows makes each inbound message more expensive than the last.
+   */
+  const trimConvos = useCallback(() => {
+    if (convosRef.current.length <= CONVO_KEEP) return;
+    setConvos((prev) => (prev.length > CONVO_KEEP ? prev.slice(0, CONVO_KEEP) : prev));
+    setHasMoreConvos(true);
+    nextCursor.current = null;
+  }, []);
 
   /**
    * Back at the latest message: drop the older pages the reader scrolled through.
@@ -438,6 +492,54 @@ export default function Dashboard() {
   }, []);
 
   /* ═══ REALTIME ═══ */
+  /** Incoming messages for the open chat, applied in batches. */
+  const pendingMsgs = useRef<Message[]>([]);
+  const msgFlush = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const flushMsgs = useCallback(() => {
+    msgFlush.current = null;
+    const batch = pendingMsgs.current;
+    if (!batch.length) return;
+    pendingMsgs.current = [];
+
+    const id = selIdRef.current;
+    let sawInbound = false;
+
+    setMsgs((prev) => {
+      const seen = new Set(prev.map((m) => m.id));
+      let next = prev; // copied lazily, so a batch of duplicates changes nothing
+      const copy = () => {
+        if (next === prev) next = [...prev];
+        return next;
+      };
+      for (const m of batch) {
+        if (m.conversation_id !== id) continue;
+        if (m.role === "user") sawInbound = true;
+        if (seen.has(m.id) || lastSentIdsRef.current.has(m.id)) continue;
+        seen.add(m.id);
+        // Replace our own optimistic row if it is still on screen.
+        const tempIdx = next.findIndex(
+          (x) => x.id.startsWith("temp_") && x.content === m.content && x.role === m.role,
+        );
+        if (tempIdx >= 0) {
+          copy()[tempIdx] = m;
+          continue;
+        }
+        if (m.role === "assistant" && sendingRef.current) continue;
+        copy().push(m);
+      }
+      return next;
+    });
+
+    if (sawInbound && id) markRead(id);
+  }, [markRead]);
+
+  useEffect(() => {
+    return () => {
+      if (msgFlush.current) clearTimeout(msgFlush.current);
+    };
+  }, []);
+
   const notify = useCallback((title: string, body: string, tag: string) => {
     if ("Notification" in window && Notification.permission === "granted") {
       new Notification(title, { body, icon: "/favicon.ico", tag });
@@ -445,21 +547,58 @@ export default function Dashboard() {
     beep();
   }, []);
 
-  /** Apply one conversation row from a realtime payload to the sidebar. */
+  /**
+   * Realtime rows land in this buffer and are applied together on a short timer.
+   * One render, one re-sort per burst — see REALTIME_FLUSH_MS.
+   */
+  const pendingConvos = useRef<Map<string, ConversationWithLastMessage>>(new Map());
+  const convoFlush = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const flushConvos = useCallback(() => {
+    convoFlush.current = null;
+    const batch = [...pendingConvos.current.values()];
+    pendingConvos.current.clear();
+    if (!batch.length) return;
+
+    setConvos((prev) => {
+      const index = new Map(prev.map((c) => [c.id, c]));
+      let touched = false;
+      for (const row of batch) {
+        const known = index.get(row.id);
+        if (row.is_archived) {
+          if (known) {
+            index.delete(row.id);
+            touched = true;
+          }
+          continue;
+        }
+        if (known) {
+          // Keep labels: the realtime payload doesn't carry the join.
+          index.set(row.id, { ...known, ...row, labels: known.labels });
+          touched = true;
+        } else if (filterRef.current === "all" && !queryRef.current) {
+          // A brand-new chat only belongs in an unfiltered list.
+          index.set(row.id, { ...row, labels: [] });
+          touched = true;
+        }
+      }
+      if (!touched) return prev;
+      const next = sortConvos([...index.values()]);
+      return sameConvos(prev, next) ? prev : next;
+    });
+  }, []);
+
+  /** Queue one conversation row from a realtime payload. */
   const patchConvo = useCallback(
     (row: ConversationWithLastMessage) => {
       if (!row?.id) return;
+
+      // Notification is decided here, not in the flush: it needs the unread count
+      // as it was BEFORE this event, and the buffer may coalesce several events
+      // for the same chat.
       const known = convosRef.current.find((c) => c.id === row.id);
-
-      if (row.is_archived) {
-        if (known) setConvos((prev) => prev.filter((c) => c.id !== row.id));
-        return;
-      }
-
-      // New incoming message in a chat that isn't open → notify from this payload.
-      // (No extra subscription needed: the denormalized conversation row already
-      // carries the sender and the preview text.)
       if (
+        !row.is_archived &&
         row.last_message_role === "user" &&
         row.id !== selIdRef.current &&
         !row.is_muted &&
@@ -468,16 +607,17 @@ export default function Dashboard() {
         notify(row.name || row.phone || "New Message", (row.last_message || "New message").slice(0, 100), row.id);
       }
 
-      if (known) {
-        // Keep labels: the realtime payload doesn't carry the join.
-        setConvos((prev) => sortConvos(prev.map((c) => (c.id === row.id ? { ...c, ...row, labels: c.labels } : c))));
-      } else if (filterRef.current === "all" && !queryRef.current) {
-        // A brand-new chat only belongs at the top of an unfiltered list.
-        setConvos((prev) => sortConvos([{ ...row, labels: [] }, ...prev]));
-      }
+      pendingConvos.current.set(row.id, row);
+      convoFlush.current ||= setTimeout(flushConvos, REALTIME_FLUSH_MS);
     },
-    [notify],
+    [flushConvos, notify],
   );
+
+  useEffect(() => {
+    return () => {
+      if (convoFlush.current) clearTimeout(convoFlush.current);
+    };
+  }, []);
 
   // Sidebar: patched straight from the payload. The old code called a full
   // conversation-list refetch on every single realtime event — with N tabs open
@@ -519,22 +659,10 @@ export default function Dashboard() {
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "messages", filter: `conversation_id=eq.${id}` },
         (p) => {
-          const m = p.new as Message;
-          setMsgs((prev) => {
-            if (prev.some((x) => x.id === m.id)) return prev;
-            if (lastSentIdsRef.current.has(m.id)) return prev;
-            const tempIdx = prev.findIndex(
-              (x) => x.id.startsWith("temp_") && x.content === m.content && x.role === m.role,
-            );
-            if (tempIdx >= 0) {
-              const updated = [...prev];
-              updated[tempIdx] = m;
-              return updated;
-            }
-            if (m.role === "assistant" && sendingRef.current) return prev;
-            return [...prev, m];
-          });
-          if (m.role === "user") markRead(id);
+          // Buffered like the conversation list: a customer sending five messages
+          // in a row is one render, not five.
+          pendingMsgs.current.push(p.new as Message);
+          msgFlush.current ||= setTimeout(flushMsgs, REALTIME_FLUSH_MS);
         },
       )
       .on(
@@ -548,8 +676,9 @@ export default function Dashboard() {
       .subscribe();
     return () => {
       supabase.removeChannel(channel);
+      pendingMsgs.current = [];
     };
-  }, [supabase, selId, markRead]);
+  }, [supabase, selId, flushMsgs]);
 
   useEffect(() => {
     if ("Notification" in window && Notification.permission === "default") Notification.requestPermission();
@@ -1026,24 +1155,10 @@ export default function Dashboard() {
   const open2FA = useCallback(() => setShow2FA(true), []);
 
   /* ═══ AUTH GATE ═══ */
-  if (authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--bg)" }}>
-        <div className="flex flex-col items-center gap-4">
-          <div
-            className="w-14 h-14 rounded-2xl flex items-center justify-center"
-            style={{ background: "var(--primary)" }}
-          >
-            <Sym n="chat" size={28} fill className="text-white" />
-          </div>
-          <div
-            className="w-5 h-5 border-2 rounded-full animate-spin"
-            style={{ borderColor: "var(--primary)", borderTopColor: "transparent" }}
-          />
-        </div>
-      </div>
-    );
-  }
+  // The app frame with skeletons, not a spinner on an empty page: the chrome and
+  // the list shape are static, so they belong on screen in the first frame. The
+  // real rows then fade into the same layout without anything moving.
+  if (authLoading) return <AppShellSkeleton />;
   if (!user) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: "var(--bg)" }}>
@@ -1074,6 +1189,7 @@ export default function Dashboard() {
         onQueryChange={setQuery}
         onFilterChange={setFilter}
         onLoadMore={loadMoreConvos}
+        onReachedTop={trimConvos}
         onSelect={selectChat}
         onAction={handleChatAction}
         onToggleLabel={toggleLabel}
@@ -1120,6 +1236,7 @@ export default function Dashboard() {
             sending={sending}
             hasMore={hasMoreMsgs}
             loadingMore={loadingMore}
+            loadingFirstPage={loadingMsgs}
             onLoadOlder={loadOlderMsgs}
             onReachedBottom={trimToTail}
             onSend={handleSend}

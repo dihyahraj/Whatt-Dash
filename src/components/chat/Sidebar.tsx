@@ -4,6 +4,7 @@ import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { ConversationWithLastMessage, Label } from "@/lib/types";
 import { aclr, ini, lmp } from "@/lib/format";
 import { ConversationRow } from "./ConversationRow";
+import { SidebarSkeleton } from "./Skeletons";
 import { ChatAction, MI, MenuDivider, Sym, s } from "./ui";
 
 type Theme = "light" | "dark" | "system";
@@ -33,6 +34,7 @@ export const Sidebar = memo(function Sidebar({
   onQueryChange,
   onFilterChange,
   onLoadMore,
+  onReachedTop,
   onSelect,
   onAction,
   onToggleLabel,
@@ -60,6 +62,7 @@ export const Sidebar = memo(function Sidebar({
   onQueryChange: (q: string) => void;
   onFilterChange: (f: string) => void;
   onLoadMore: () => void;
+  onReachedTop: () => void;
   onSelect: (id: string) => void;
   onAction: (action: ChatAction, convo: ConversationWithLastMessage) => void;
   onToggleLabel: (convoId: string, labelId: string, has: boolean) => void;
@@ -112,6 +115,7 @@ export const Sidebar = memo(function Sidebar({
 
   // Infinite scroll — one rAF-throttled check per scroll burst.
   const ticking = useRef(false);
+  const wasAtTop = useRef(true);
   const handleScroll = useCallback(() => {
     if (ticking.current) return;
     ticking.current = true;
@@ -120,8 +124,12 @@ export const Sidebar = memo(function Sidebar({
       const el = listRef.current;
       if (!el) return;
       if (el.scrollHeight - el.scrollTop - el.clientHeight < 400) onLoadMore();
+      // Scrolled back to the newest chats: the pages below can be released.
+      const atTop = el.scrollTop < 200;
+      if (atTop && !wasAtTop.current) onReachedTop();
+      wasAtTop.current = atTop;
     });
-  }, [onLoadMore]);
+  }, [onLoadMore, onReachedTop]);
 
   const selectChat = useCallback(
     (id: string) => {
@@ -362,6 +370,9 @@ export const Sidebar = memo(function Sidebar({
 
       {/* ── List ── */}
       <div ref={listRef} onScroll={handleScroll} className="flex-1 overflow-y-auto">
+        {/* First load with nothing cached: placeholder rows in the real row shape,
+            so the list doesn't pop into existence. */}
+        {loading && convos.length === 0 && <SidebarSkeleton rows={8} />}
         {convos.length === 0 && !loading && (
           <div className="flex flex-col items-center justify-center h-48 gap-2">
             <Sym n="forum" size={32} color="var(--text-4)" />
@@ -386,7 +397,8 @@ export const Sidebar = memo(function Sidebar({
             onToggleLabel={onToggleLabel}
           />
         ))}
-        {loading && (
+        {/* Spinner only for "loading more" — the empty first load uses skeletons. */}
+        {loading && convos.length > 0 && (
           <div className="flex justify-center py-4">
             <div
               className="w-5 h-5 border-2 rounded-full animate-spin"

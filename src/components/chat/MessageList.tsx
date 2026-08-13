@@ -12,6 +12,7 @@ import {
 } from "react";
 import type { Message } from "@/lib/types";
 import { MessageRow } from "./MessageRow";
+import { MessagesSkeleton } from "./Skeletons";
 import { MI, Sym } from "./ui";
 
 /**
@@ -28,6 +29,7 @@ export const MessageList = memo(function MessageList({
   peerName,
   hasMore,
   loadingMore,
+  loadingFirstPage,
   onLoadOlder,
   onReachedBottom,
   onReply,
@@ -40,6 +42,7 @@ export const MessageList = memo(function MessageList({
   peerName: string;
   hasMore: boolean;
   loadingMore: boolean;
+  loadingFirstPage: boolean;
   onLoadOlder: () => void;
   onReachedBottom: () => void;
   onReply: (msg: Message) => void;
@@ -189,12 +192,25 @@ export const MessageList = memo(function MessageList({
   const menuHeight = 220;
   const flipUp = menu ? menu.y + menuHeight > window.innerHeight - 20 : false;
 
+  // Nothing to show yet: bubble placeholders, not an empty void. The real
+  // messages fade into the same space a moment later.
+  if (loadingFirstPage && msgs.length === 0) {
+    return (
+      <div className="flex-1 min-h-0 flex flex-col" style={{ background: "var(--chat-bg)" }}>
+        <MessagesSkeleton />
+      </div>
+    );
+  }
+
   return (
     <div className="flex-1 min-h-0 relative flex flex-col">
       <div
         ref={boxRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-2.5 sm:px-12 lg:px-20 py-3 sm:py-4"
+        // anim-content: a 180ms fade the first time a chat's messages appear.
+        // The panel is remounted per conversation (key={id} in the dashboard), so
+        // this plays exactly once per open and never on an update.
+        className="flex-1 overflow-y-auto px-2.5 sm:px-12 lg:px-20 py-3 sm:py-4 anim-content"
         // overflowAnchor:none — Chrome/Firefox scroll anchoring ALSO shifts
         // scrollTop when content is prepended above the viewport, which stacked on
         // top of the manual restore above and overshot by a whole page.
