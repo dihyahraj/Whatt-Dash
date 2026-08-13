@@ -99,8 +99,11 @@ export async function GET(request: NextRequest) {
       pinned.push(...((data || []) as unknown as Row[]));
     }
 
+    // `not is_pinned is true` rather than `= false`, so a row where the column is
+    // somehow NULL still lands in exactly one of the two queries. With `= false`
+    // it would match neither and the chat would silently vanish from the sidebar.
     let query = base()
-      .eq("is_pinned", false)
+      .not("is_pinned", "is", true)
       .order("updated_at", { ascending: false })
       .order("id", { ascending: false })
       .limit(limit + 1);
