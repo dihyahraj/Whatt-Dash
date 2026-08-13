@@ -29,6 +29,7 @@ export const MessageList = memo(function MessageList({
   hasMore,
   loadingMore,
   onLoadOlder,
+  onReachedBottom,
   onReply,
   onForward,
   onStar,
@@ -40,6 +41,7 @@ export const MessageList = memo(function MessageList({
   hasMore: boolean;
   loadingMore: boolean;
   onLoadOlder: () => void;
+  onReachedBottom: () => void;
   onReply: (msg: Message) => void;
   onForward: (msg: Message) => void;
   onStar: (id: string, starred: boolean) => void;
@@ -57,6 +59,7 @@ export const MessageList = memo(function MessageList({
   const [seenId, setSeenId] = useState<string | null>(null);
   const didInitialScroll = useRef(false);
   const prevLastId = useRef<string | null>(null);
+  const wasAtBottom = useRef(true);
   /** Distance from the bottom, captured just before an older page is prepended. */
   const loadAnchor = useRef<number | null>(null);
 
@@ -156,12 +159,17 @@ export const MessageList = memo(function MessageList({
       // Reaching the bottom means everything currently loaded has been seen.
       if (atBottom) setSeenId(lastId);
       setIsAtBottom(atBottom);
+      // Back at the latest message: the pages the reader scrolled through can be
+      // dropped from the DOM (they're off-screen and re-fetchable), which is what
+      // keeps a long browsing session from growing to thousands of nodes.
+      if (atBottom && !wasAtBottom.current) onReachedBottom();
+      wasAtBottom.current = atBottom;
       if (el.scrollTop < 100 && hasMore && !loadingMore && loadAnchor.current == null) {
         loadAnchor.current = el.scrollHeight - el.scrollTop;
         onLoadOlder();
       }
     });
-  }, [hasMore, lastId, loadingMore, onLoadOlder]);
+  }, [hasMore, lastId, loadingMore, onLoadOlder, onReachedBottom]);
 
   const openMenu = useCallback((msg: Message, anchor: { x: number; y: number; isMe: boolean }) => {
     setReactPickerId(null);

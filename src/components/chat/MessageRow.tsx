@@ -127,20 +127,24 @@ function MessageBody({ msg, onOpenImage }: { msg: Message; onOpenImage: (url: st
     );
   }
   switch (msg.message_type) {
-    case "image":
+    // The caption wrapper only exists when there IS a caption — one less DOM node
+    // per media bubble, and most history is uncaptioned.
+    case "image": {
+      const caption = msg.media_caption && msg.media_caption !== "[image]" ? msg.media_caption : null;
+      if (!caption) return <MediaThumb msg={msg} onOpen={onOpenImage} />;
       return (
         <div>
           <MediaThumb msg={msg} onOpen={onOpenImage} />
-          {msg.media_caption && msg.media_caption !== "[image]" && (
-            <p className="text-[13px] mt-1.5 whitespace-pre-wrap select-text">{msg.media_caption}</p>
-          )}
+          <p className="text-[13px] mt-1.5 whitespace-pre-wrap select-text">{caption}</p>
         </div>
       );
+    }
     case "video":
+      if (!msg.media_caption) return <MediaThumb msg={msg} onOpen={onOpenImage} />;
       return (
         <div>
           <MediaThumb msg={msg} onOpen={onOpenImage} />
-          {msg.media_caption && <p className="text-[13px] mt-1.5 select-text">{msg.media_caption}</p>}
+          <p className="text-[13px] mt-1.5 select-text">{msg.media_caption}</p>
         </div>
       );
     case "audio":
@@ -242,8 +246,9 @@ export const MessageRow = memo(function MessageRow({
   const isMe = msg.role === "assistant";
   const isSticker = msg.message_type === "sticker";
 
+  // Fragment, not a wrapper div: one less node for every message on screen.
   return (
-    <div>
+    <>
       {showDate && (
         <div className="flex justify-center my-4">
           <span
@@ -292,21 +297,21 @@ export const MessageRow = memo(function MessageRow({
                   }
             }
           >
+            {/* Positioned directly, with no wrapper div — this button exists on every
+                message on screen, so a node saved here is a node saved per bubble. */}
             {!msg.is_deleted && (
-              <div className="absolute right-0 top-0 opacity-0 group-hover/m:opacity-100 z-10">
-                <button
-                  onMouseDown={(e) => e.stopPropagation()}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    const rect = e.currentTarget.getBoundingClientRect();
-                    onOpenMenu(msg, { x: isMe ? rect.right : rect.left, y: rect.bottom + 4, isMe });
-                  }}
-                  className="w-7 h-7 rounded-bl-xl flex items-center justify-center"
-                  style={{ background: isMe ? "var(--bubble-me)" : "var(--bubble-them)" }}
-                >
-                  <Sym n="expand_more" size={16} color="var(--text-3)" />
-                </button>
-              </div>
+              <button
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const rect = e.currentTarget.getBoundingClientRect();
+                  onOpenMenu(msg, { x: isMe ? rect.right : rect.left, y: rect.bottom + 4, isMe });
+                }}
+                className="absolute right-0 top-0 z-10 w-7 h-7 rounded-bl-xl flex items-center justify-center opacity-0 group-hover/m:opacity-100"
+                style={{ background: isMe ? "var(--bubble-me)" : "var(--bubble-them)" }}
+              >
+                <Sym n="expand_more" size={16} color="var(--text-3)" />
+              </button>
             )}
             <MessageBody msg={msg} onOpenImage={onOpenImage} />
             {msg.message_type !== "audio" && (
@@ -359,6 +364,6 @@ export const MessageRow = memo(function MessageRow({
           )}
         </div>
       </div>
-    </div>
+    </>
   );
 });

@@ -22,6 +22,7 @@ export const ChatPanel = memo(function ChatPanel({
   hasMore,
   loadingMore,
   onLoadOlder,
+  onReachedBottom,
   onSend,
   onSendFile,
   onStar,
@@ -45,6 +46,7 @@ export const ChatPanel = memo(function ChatPanel({
   hasMore: boolean;
   loadingMore: boolean;
   onLoadOlder: () => void;
+  onReachedBottom: () => void;
   onSend: (text: string, replyTo: Message | null) => Promise<boolean>;
   onSendFile: (file: File, caption: string, forceType: string | null) => void;
   onStar: (id: string, starred: boolean) => void;
@@ -102,6 +104,7 @@ export const ChatPanel = memo(function ChatPanel({
         hasMore={hasMore}
         loadingMore={loadingMore}
         onLoadOlder={onLoadOlder}
+        onReachedBottom={onReachedBottom}
         onReply={setReplyTo}
         onForward={onForward}
         onStar={onStar}
