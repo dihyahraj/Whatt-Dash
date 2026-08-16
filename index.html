@@ -1,0 +1,1838 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Helion — We give them gravity.</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Mulish:wght@300;400&display=swap" rel="stylesheet">
+<script type="importmap">
+{"imports":{
+  "three":"https://unpkg.com/three@0.162.0/build/three.module.js",
+  "three/addons/":"https://unpkg.com/three@0.162.0/examples/jsm/"
+}}
+</script>
+<script src="https://unpkg.com/lenis@1.3.19/dist/lenis.min.js"></script>
+<style>
+:root{
+  --background:#02040d; --foreground:#ffffff;
+  --surface-deep:#030716; --surface-panel:#060c22;
+  --accent-900:#030716; --accent-800:#081235; --accent-700:#12266b; --accent-600:#2340b8;
+  --accent-500:#3a5cff; --accent-400:#6d8bff; --accent-300:#9fb8ff; --accent-200:#d6e2ff;
+  --signal-glow:#ff5fa8; --signal-ring:#ff8fc4;
+  --container-pad:2.5rem; --radius-control:0.875rem;
+  --shadow-loader-rail:0 0 16px -2px rgb(58 92 255 / 0.9);
+  --hero-glass:rgb(0 0 0 / 0.8); --hero-glass-border:rgb(255 255 255 / 0.2);
+  --gradient-hero-title:linear-gradient(90deg,#ffffff 0%,rgb(200 214 255 / 0.2) 100%);
+  --gradient-hero-title-inv:linear-gradient(90deg,rgb(200 214 255 / 0.2) 0%,#ffffff 100%);
+  --gradient-hero-cta:linear-gradient(107deg,#4977ff 0%,#331574 51.442%,#000315 100%);
+  --gradient-hero-icon:linear-gradient(120deg,#4977ff 0%,#d2bdff 100%);
+  --gradient-service-rule:linear-gradient(90deg,#4564e5 0%,rgb(69 100 229 / 0) 100%);
+  --gradient-service-rule-alt:linear-gradient(90deg,rgb(207 186 255 / 0) 0%,#cfbaff 100%);
+  --timeline-rail:rgb(120 150 255 / 0.22);
+  --gradient-timeline-tick:linear-gradient(180deg,rgb(73 119 255 / 0) 0%,rgb(73 119 255 / 0.55) 100%);
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{font-size:16px;overflow-x:hidden;overscroll-behavior-y:none;scrollbar-width:none}
+::-webkit-scrollbar{display:none}
+body{background:var(--background);color:var(--foreground);font-family:'Mulish',sans-serif;font-weight:400;overflow-x:hidden}
+button{cursor:pointer;border:none;background:none;font:inherit;color:inherit}
+ul{list-style:none}
+a{color:inherit;text-decoration:none}
+img{display:block;max-width:100%}
+:focus-visible{outline:2px solid #3a5cff;outline-offset:2px}
+input{font:inherit;border:none;outline:none}
+
+/* ---------- scene canvas & scrim ---------- */
+#scene-wrap{position:fixed;inset:0;width:100vw;height:100vh;width:100lvw;height:100lvh;pointer-events:none;transform:translateZ(0);backface-visibility:hidden;will-change:transform;z-index:0}
+#scene-wrap canvas{width:100%;height:100%;display:block}
+.scene-overlay{position:absolute;inset:0;pointer-events:none;background:
+  linear-gradient(90deg, rgb(0 0 0/.5) 0%, rgb(0 0 0/.16) 24%, rgb(0 0 0/0) 42%,
+                         rgb(0 0 0/0) 58%, rgb(0 0 0/.14) 78%, rgb(0 0 0/.42) 100%),
+  linear-gradient(180deg, rgb(0 0 0/.42) 0%, rgb(0 0 0/0) 22%, rgb(0 0 0/0) 58%,
+                          rgb(0 0 0/.38) 82%, rgb(0 0 0/.72) 100%);}
+@media (max-width:768px){.scene-overlay{background:
+  linear-gradient(180deg, rgb(0 0 0/.5) 0%, rgb(0 0 0/.24) 26%, rgb(0 0 0/.24) 62%,
+                          rgb(0 0 0/.5) 86%, rgb(0 0 0/.78) 100%);}}
+
+/* ---------- slides (scroll anchors) ---------- */
+main{position:relative}
+.slide{position:relative;width:100%}
+#hero{height:140vh;height:140svh}
+#sitemap{height:140vh;height:140svh}
+#timeline{height:320vh;height:320svh;margin-top:300px}
+#impact{height:240vh;height:240svh;margin-top:96px}
+@media (max-width:855px){#timeline{margin-top:200px}}
+@media (max-width:480px){#timeline{margin-top:140px}}
+
+/* ---------- fixed overlays & the 1440x800 frame ---------- */
+.overlay{position:fixed;inset:0;overflow:hidden;z-index:10;opacity:0;visibility:hidden;pointer-events:none}
+.frame{position:absolute;top:50%;left:50%;width:1440px;height:800px;transform:translate(-50%,-50%)}
+
+/* ---------- loader readout ---------- */
+#loader{position:fixed;inset-inline:0;bottom:14vh;display:flex;flex-direction:column;align-items:center;gap:1.375rem;z-index:200;pointer-events:none}
+#loader .pct{font-weight:300;font-size:56px;line-height:1;font-variant-numeric:tabular-nums;color:#fff}
+#loader .pct-sym{font-size:0.42em;letter-spacing:0.1em;color:rgb(159 184 255 / 0.7);vertical-align:0.55em;margin-left:0.12em}
+#loader .load-rail{height:1px;width:min(20rem,56vw);background:rgba(255,255,255,.12);position:relative}
+#loader .load-fill{position:absolute;inset:0;background:var(--accent-500);box-shadow:var(--shadow-loader-rail);transform-origin:left;transform:scaleX(0)}
+
+/* ---------- nav ---------- */
+#nav{position:fixed;inset-inline:0;top:0;z-index:120;pointer-events:none}
+.nav-desktop{position:fixed;left:50%;top:0;transform:translateX(-50%);transform-origin:top center;display:flex;align-items:center;gap:4px;pointer-events:auto}
+.nav-rev{opacity:0;will-change:transform,opacity}
+.pill{border-radius:32px;border:1px solid var(--hero-glass-border);background:var(--hero-glass);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px)}
+.logo-pill{height:43px;padding:12px 24px;display:flex;align-items:center}
+.logo-pill button{display:flex;align-items:center}
+.logo-pill svg{width:69.038px;height:18.972px}
+.links-pill{padding:12px 32px}
+.links-pill ul{display:flex;align-items:center;gap:32px}
+.links-pill a{font-size:16px;font-weight:400;color:#fff;opacity:.68;display:inline-block;will-change:transform,opacity}
+.cta-pill{display:flex;align-items:center;gap:8px;border-radius:50px;padding:12px 28px;background-image:var(--gradient-hero-cta);color:#fff;font-size:16px;font-weight:400}
+.cta-pill .dot{width:3px;height:3px;border-radius:9999px;background:#fff;flex:none}
+.nav-mobile{display:none}
+@media (max-width:855px){
+  .nav-desktop{display:none}
+  .nav-mobile{display:flex;position:fixed;inset-inline:0;top:0;padding:16px 16px 0;justify-content:space-between;align-items:flex-start;pointer-events:auto}
+  .nav-mobile .logo-pill{height:44px;padding-inline:20px}
+  .nav-m-right{position:relative}
+  .burger{width:44px;height:44px;border-radius:9999px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2.5px;padding:0}
+  .burger span{display:block;width:16px;height:1.5px;background:#fff;border-radius:1px;will-change:transform,opacity}
+  .sheet{position:absolute;top:calc(100% + 10px);right:0;width:220px;border-radius:24px;padding:10px;display:flex;flex-direction:column;gap:6px;border:1px solid var(--hero-glass-border);background:var(--hero-glass);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);opacity:0;visibility:hidden}
+  .sheet a{display:block;padding:12px 16px;border-radius:16px;font-size:16px}
+  .sheet a.active{background:rgb(255 255 255 / 0.1)}
+  .sheet .cta-pill{justify-content:center;width:100%;margin-top:2px}
+}
+
+/* ---------- shared type ---------- */
+.masthead{position:absolute;top:100px;left:389px;width:663px;text-align:center;font-weight:300;font-size:56px;line-height:1}
+.mast-line{display:block}
+.ltr{display:inline-block;white-space:pre;will-change:transform,opacity,filter}
+.words{display:flex;flex-wrap:wrap;justify-content:center;column-gap:.3em}
+.word{display:inline-block;will-change:transform,opacity,filter}
+.subtitle{position:absolute;top:633px;left:518px;width:405px;font-weight:400;font-size:16px;line-height:1.2;color:#fff}
+.form-slot{position:absolute;top:703px;left:409px;width:623px;will-change:transform,opacity}
+
+/* ---------- hero ---------- */
+.hero-mark{position:absolute;top:360px;left:658.46px;width:123.86px;height:124.97px;will-change:transform,opacity}
+.mark-halo{position:absolute;left:50%;top:50%;width:210px;height:210px;transform:translate(-50%,-50%);border-radius:9999px;background:rgb(0 0 0 / 0.6);filter:blur(40px)}
+.mark-ring{position:absolute;left:50%;top:50%;width:285px;height:285px;transform:translate(-50%,-50%);border-radius:9999px;border:1px solid var(--hero-glass-border)}
+.hero-icon{position:absolute;inset:0}
+.hero-icon svg{position:absolute;inset:0;width:100%;height:100%;will-change:transform}
+
+/* ---------- contact form ---------- */
+.contact{display:flex;align-items:center;gap:25px;border-radius:32px;border:1px solid var(--hero-glass-border);background:var(--hero-glass);padding:2px 2px 2px 32px;backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);pointer-events:auto}
+.contact input{width:180px;background:transparent;color:#fff;font-size:16px;font-weight:400}
+.contact input::placeholder{color:rgba(255,255,255,.9)}
+.contact .submit{margin-left:auto;display:flex;align-items:center;gap:8px;border-radius:50px;padding:2px 28px 2px 2px;background-image:var(--gradient-hero-cta);color:#fff;font-size:16px;flex:none;will-change:transform}
+.contact .chev{width:39px;height:39px;border-radius:9999px;background:#fff;display:flex;align-items:center;justify-content:center;flex:none}
+.contact .chev svg{width:23px;height:23px;display:block}
+
+/* ---------- services ---------- */
+.svc-cell{position:absolute;width:400px;display:flex;flex-direction:column;gap:12px;will-change:transform,opacity}
+.svc-cell.svc-right{align-items:flex-end;text-align:right}
+.svc-cell h3{font-weight:300;font-size:32px;line-height:1;color:#fff}
+.svc-cell p{font-size:16px;line-height:1.2;color:#fff}
+.svc-rule{margin-top:16px;height:1px;width:100%;background:var(--gradient-service-rule)}
+.svc-rule.alt{background:var(--gradient-service-rule-alt)}
+.svc-foot{position:absolute;top:712px;left:509px;width:423px;text-align:center;font-size:16px;line-height:1.2;color:#fff}
+.svc-mobile{position:absolute;inset:0;display:none;flex-direction:column;align-items:center;gap:24px;padding:96px 24px 32px}
+
+/* ---------- timeline ---------- */
+.tl-track{position:absolute;top:0;left:0;height:800px;will-change:transform}
+.tl-baseline{position:absolute;top:754px;left:50px;height:1px;background:var(--timeline-rail);transform-origin:left}
+.tl-tick{position:absolute;top:579px;width:1px;height:174px;transform-origin:bottom;background:var(--gradient-timeline-tick)}
+.tl-marker{position:absolute;width:19px;height:19px;will-change:transform,opacity}
+.tl-marker svg{display:block;width:19px;height:19px}
+.tl-content{position:absolute;top:579px;width:405px;display:flex;flex-direction:column;gap:24px;will-change:transform,opacity}
+.tl-group{width:204px;display:flex;flex-direction:column;gap:12px}
+.tl-idx{font-size:16px;font-weight:400;background:var(--gradient-hero-icon);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent}
+.tl-content h3{font-weight:300;font-size:32px;line-height:1;color:#fff}
+.tl-content p{font-size:16px;line-height:1.2;color:#fff}
+.tl-mobile{position:absolute;inset:0;display:none;flex-direction:column;gap:24px;padding:92px 24px 20px}
+.tlm-window{flex:1;overflow:hidden}
+.tlm-list{will-change:transform}
+.tlm-item{position:relative;padding-left:28px;padding-bottom:28px;will-change:transform,opacity}
+.tlm-item::before{content:"";position:absolute;left:6.5px;top:18px;bottom:0;width:1px;background:var(--timeline-rail)}
+.tlm-item:last-child::before{display:none}
+.tlm-tri{position:absolute;left:0;top:2px;width:14px;height:14px}
+.tlm-tri svg{display:block;width:14px;height:14px}
+.tlm-idx{font-size:14px;background:var(--gradient-hero-icon);-webkit-background-clip:text;background-clip:text;color:transparent;-webkit-text-fill-color:transparent}
+.tlm-item h3{font-weight:300;font-size:22px;line-height:1.1;color:#fff;margin-top:6px}
+.tlm-item p{font-size:15px;line-height:1.3;color:rgb(255 255 255 / 0.8);margin-top:8px;max-width:420px}
+
+/* ---------- impact ---------- */
+.imp-foot{width:100%}
+
+/* ---------- mobile reflow (<855px) ---------- */
+@media (max-width:855px){
+  .frame{top:0;left:0;width:100%;height:100%;transform:none}
+  .masthead{position:static;width:auto;font-size:clamp(24px,6.4vw,44px);line-height:1.06}
+  #ov-hero .frame{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:22px;padding:92px 20px 28px}
+  .hero-mark{position:relative;top:auto;left:auto;width:92px;height:92px;flex:none}
+  .mark-halo{width:150px;height:150px}
+  .mark-ring{width:200px;height:200px}
+  #ov-hero .subtitle,#ov-impact .subtitle{position:static;width:auto;max-width:420px;font-size:15px}
+  #ov-hero .form-slot,#ov-impact .form-slot{position:static;width:100%;max-width:420px}
+  .contact{flex-direction:column;align-items:stretch;gap:10px;border-radius:24px;padding:10px}
+  .contact input{width:100%;border-radius:16px;background:rgb(255 255 255 / 0.06);padding:14px 18px}
+  .contact .submit{margin-left:0;width:100%;justify-content:center;padding:6px 18px 6px 6px}
+  #ov-services .frame{display:none}
+  .svc-mobile{display:flex}
+  .svc-mlist{display:flex;flex-direction:column;gap:18px;width:100%;max-width:420px}
+  .svc-mcell{display:flex;flex-direction:column;gap:8px}
+  .svc-mcell h3{font-weight:300;font-size:22px;line-height:1;color:#fff}
+  .svc-mcell p{font-size:15px;color:rgb(255 255 255 / 0.8)}
+  .svc-mcell .svc-rule{margin-top:10px}
+  .svc-mfoot{font-size:14px;color:rgb(255 255 255 / 0.85);text-align:center;max-width:420px}
+  #ov-timeline .frame{display:none}
+  .tl-mobile{display:flex}
+  #ov-impact .frame{display:flex;flex-direction:column;justify-content:space-between;align-items:center;padding:100px 20px 36px}
+  .imp-foot{display:flex;flex-direction:column;align-items:center;gap:16px}
+}
+</style>
+</head>
+<body>
+
+<!-- The one continuous WebGL scene, fixed behind everything -->
+<div id="scene-wrap">
+  <canvas id="scene"></canvas>
+  <div class="scene-overlay"></div>
+</div>
+
+<!-- Warp-tunnel load readout -->
+<div id="loader" role="status" aria-live="polite">
+  <p class="pct"><span id="pct-num">0</span><span class="pct-sym">%</span></p>
+  <div class="load-rail"><span id="load-fill" class="load-fill"></span></div>
+</div>
+
+<!-- Fixed nav -->
+<header id="nav">
+  <div class="nav-desktop" id="nav-desktop">
+    <div class="nav-rev"><div class="pill logo-pill" data-hover><button data-scroll="#hero" aria-label="Helion — back to top"><span id="wordmark-a"></span></button></div></div>
+    <div class="nav-rev"><nav class="pill links-pill" data-hover aria-label="Primary"><ul id="nav-links"></ul></nav></div>
+    <div class="nav-rev"><button class="cta-pill" id="nav-cta" data-scroll="#sitemap"><span>Send Request</span><i class="dot"></i></button></div>
+  </div>
+  <div class="nav-mobile">
+    <div class="nav-rev"><div class="pill logo-pill"><button data-scroll="#hero" aria-label="Helion — back to top"><span id="wordmark-b"></span></button></div></div>
+    <div class="nav-m-right nav-rev">
+      <button class="pill burger" id="burger" aria-label="Menu" aria-expanded="false"><span></span><span></span><span></span></button>
+      <div class="sheet" id="sheet"></div>
+    </div>
+  </div>
+</header>
+
+<!-- 1. Hero -->
+<div class="overlay" id="ov-hero">
+  <div class="frame" data-fit="contain">
+    <h1 class="masthead" id="hero-h"></h1>
+    <div class="hero-mark" id="hero-mark">
+      <div class="mark-halo"></div>
+      <div class="mark-ring"></div>
+      <div class="hero-icon" id="hero-icon"></div>
+    </div>
+    <p class="subtitle" id="hero-sub"></p>
+    <div class="form-slot" id="hero-form"></div>
+  </div>
+</div>
+
+<!-- 2. Services -->
+<div class="overlay" id="ov-services">
+  <div class="frame" data-fit="width" id="svc-frame">
+    <h2 class="masthead" id="svc-h"></h2>
+    <p class="svc-foot" id="svc-foot"></p>
+  </div>
+  <div class="svc-mobile">
+    <h2 class="masthead" id="svc-mh"></h2>
+    <div class="svc-mlist" id="svc-mlist"></div>
+    <p class="svc-mfoot" id="svc-mfoot"></p>
+  </div>
+</div>
+
+<!-- 3. Timeline / roadmap -->
+<div class="overlay" id="ov-timeline">
+  <div class="frame" data-fit="width">
+    <div class="tl-track" id="tl-track"></div>
+    <h2 class="masthead" id="tl-h"></h2>
+  </div>
+  <div class="tl-mobile">
+    <h2 class="masthead" id="tlm-h"></h2>
+    <div class="tlm-window" id="tlm-window"><ul class="tlm-list" id="tlm-list"></ul></div>
+  </div>
+</div>
+
+<!-- 4. Impact / closing -->
+<div class="overlay" id="ov-impact">
+  <div class="frame" data-fit="contain">
+    <h2 class="masthead" id="imp-h"></h2>
+    <div class="imp-foot">
+      <p class="subtitle" id="imp-sub"></p>
+      <div class="form-slot" id="imp-form"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Scroll anchors -->
+<main>
+  <div class="slide" id="hero"></div>
+  <div class="slide" id="sitemap"></div>
+  <div class="slide" id="timeline"></div>
+  <div class="slide" id="impact"></div>
+</main>
+
+<script type="module">
+import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+
+/* ================================================================
+   helpers
+================================================================ */
+const TAU = Math.PI * 2;
+const clamp01 = v => Math.min(1, Math.max(0, v));
+const lerp = (a, b, t) => a + (b - a) * t;
+const smoothstep = (a, b, x) => { const t = clamp01((x - a) / (b - a)); return t * t * (3 - 2 * t); };
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const mqMobile = matchMedia('(max-width: 855px)'); // must agree exactly with the CSS breakpoint
+
+function cubicBezier(x1, y1, x2, y2) {
+  const A = (a1, a2) => 1 - 3 * a2 + 3 * a1, B = (a1, a2) => 3 * a2 - 6 * a1, C = a1 => 3 * a1;
+  const calc = (t, a1, a2) => ((A(a1, a2) * t + B(a1, a2)) * t + C(a1)) * t;
+  const slope = (t, a1, a2) => 3 * A(a1, a2) * t * t + 2 * B(a1, a2) * t + C(a1);
+  return x => {
+    if (x <= 0) return 0; if (x >= 1) return 1;
+    let t = x;
+    for (let i = 0; i < 8; i++) { const s = slope(t, x1, x2); if (Math.abs(s) < 1e-6) break; t -= (calc(t, x1, x2) - x) / s; }
+    t = Math.min(1, Math.max(0, t));
+    return calc(t, y1, y2);
+  };
+}
+const easeReveal = cubicBezier(0.16, 0.77, 0.3, 1);
+const cubicOut = t => 1 - Math.pow(1 - t, 3);
+
+/* -------- tween engine (no CSS transitions anywhere) -------- */
+const tweens = new Set();
+function tween({ delay = 0, dur = 1000, ease = easeReveal, update, done }) {
+  tweens.add({ t0: performance.now() + delay, dur, ease, update, done });
+}
+function stepTweens(now) {
+  tweens.forEach(t => {
+    if (now < t.t0) return;
+    const k = Math.min(1, (now - t.t0) / t.dur);
+    t.update(t.ease(k), k);
+    if (k >= 1) { tweens.delete(t); if (t.done) t.done(); }
+  });
+}
+
+/* -------- springs (hover / burger / sheet) -------- */
+const springs = new Set();
+function spring({ value = 0, target = 0, tension = 320, friction = 22, onUpdate }) {
+  const s = { v: value, t: target, vel: 0, tension, friction, onUpdate };
+  springs.add(s); return s;
+}
+function stepSprings(dt) {
+  springs.forEach(s => {
+    const n = Math.max(1, Math.min(8, Math.ceil(dt / 8)));
+    const h = (dt / n) / 1000;
+    for (let i = 0; i < n; i++) {
+      const a = s.tension * (s.t - s.v) - s.friction * s.vel;
+      s.vel += a * h; s.v += s.vel * h;
+    }
+    if (Math.abs(s.t - s.v) < 1e-4 && Math.abs(s.vel) < 1e-4) { s.v = s.t; s.vel = 0; }
+    if (s.onUpdate) s.onUpdate(s.v);
+  });
+}
+function hoverScale(el, to = 1.04, tension = 320, friction = 22) {
+  if (reduced || !el) return;
+  const s = spring({ value: 1, target: 1, tension, friction, onUpdate: v => { el.style.transform = `scale(${v.toFixed(4)})`; } });
+  el.addEventListener('mouseenter', () => { s.t = to; });
+  el.addEventListener('mouseleave', () => { s.t = 1; });
+}
+
+/* -------- text reveals -------- */
+function buildHeading(el, lines) {
+  if (!el) return;
+  el.setAttribute('aria-label', lines.map(l => l.text).join(' '));
+  el.innerHTML = '';
+  lines.forEach(line => {
+    const lw = document.createElement('span');
+    lw.className = 'mast-line'; lw.setAttribute('aria-hidden', 'true');
+    const chars = [...line.text]; const n = chars.length;
+    chars.forEach((ch, i) => {
+      const s = document.createElement('span');
+      s.className = 'ltr'; s.textContent = ch;
+      const f = n > 1 ? i / (n - 1) : 0;
+      const mix = line.bright === 'left' ? f : 1 - f;      // 0 at the opaque (bright) end
+      const r = Math.round(lerp(255, 200, mix));
+      const g = Math.round(lerp(255, 214, mix));
+      const a = lerp(1, 0.2, mix);
+      s.style.color = `rgba(${r},${g},255,${a.toFixed(3)})`;
+      s.dataset.d = line.bright === 'left' ? i : n - 1 - i; // cascade starts at the bright end
+      if (!reduced) s.style.opacity = '0';
+      lw.appendChild(s);
+    });
+    el.appendChild(lw);
+  });
+}
+function revealHeading(el, base) {
+  if (!el) return;
+  const stag = mqMobile.matches ? 34 : 42;
+  el.querySelectorAll('.ltr').forEach(s => {
+    if (reduced) { s.style.opacity = ''; return; }
+    tween({
+      delay: base + (+s.dataset.d) * stag, dur: 1100, ease: easeReveal,
+      update: e => {
+        s.style.opacity = e.toFixed(3);
+        s.style.transform = `translateY(${((1 - e) * 34).toFixed(2)}px)`;
+        s.style.filter = `blur(${((1 - e) * 12).toFixed(2)}px)`;
+      },
+      done: () => { s.style.filter = ''; s.style.transform = ''; }
+    });
+  });
+}
+function splitWords(el, text) {
+  if (!el) return;
+  el.setAttribute('aria-label', text);
+  el.innerHTML = '';
+  const wrap = document.createElement('span');
+  wrap.className = 'words'; wrap.setAttribute('aria-hidden', 'true');
+  text.split(' ').forEach((w, i) => {
+    const s = document.createElement('span');
+    s.className = 'word'; s.textContent = w; s.dataset.i = i;
+    if (!reduced) s.style.opacity = '0';
+    wrap.appendChild(s);
+  });
+  el.appendChild(wrap);
+}
+function revealWords(el, delay) {
+  if (!el) return;
+  el.querySelectorAll('.word').forEach(s => {
+    if (reduced) { s.style.opacity = ''; return; }
+    tween({
+      delay: delay + (+s.dataset.i) * 45, dur: 900, ease: easeReveal,
+      update: e => {
+        s.style.opacity = e.toFixed(3);
+        s.style.transform = `translateY(${((1 - e) * 110).toFixed(2)}%)`;
+        s.style.filter = `blur(${((1 - e) * 8).toFixed(2)}px)`;
+      },
+      done: () => { s.style.filter = ''; s.style.transform = ''; }
+    });
+  });
+}
+function springRevealEl(el, { delay = 0, dur = 1200, y = 24, blur = 8, scale = 1 } = {}) {
+  if (!el) return;
+  if (reduced) { el.style.opacity = ''; el.style.transform = ''; el.style.filter = ''; return; }
+  el.style.opacity = '0';
+  tween({
+    delay, dur, ease: easeReveal,
+    update: e => {
+      el.style.opacity = e.toFixed(3);
+      const sc = scale === 1 ? '' : ` scale(${(scale + (1 - scale) * e).toFixed(4)})`;
+      el.style.transform = `translateY(${((1 - e) * y).toFixed(2)}px)${sc}`;
+      el.style.filter = `blur(${((1 - e) * blur).toFixed(2)}px)`;
+    },
+    done: () => { el.style.filter = ''; }
+  });
+}
+function revealCustom(el, { delay = 0, dur = 1000, apply }) {
+  if (!el) return;
+  if (reduced) { apply(1); return; }
+  tween({ delay, dur, ease: easeReveal, update: apply });
+}
+
+/* ================================================================
+   assets — inline SVG path data
+================================================================ */
+const TRIANGLE_OUTER = "M59.3499 3.76608C62.2192 -1.2554 69.4601 -1.25532 72.3294 3.76608L122.864 92.2182C125.666 97.1231 122.223 103.207 116.641 103.396L116.373 103.401H15.306L15.0384 103.396C9.45641 103.207 6.01354 97.1231 8.81577 92.2182L59.3499 3.76608ZM71.4613 4.26217C68.9758 -0.0874103 62.7035 -0.0874914 60.2181 4.26217L9.68393 92.7143C7.2181 97.0304 10.3352 102.401 15.306 102.401H116.373C121.344 102.401 124.461 97.0305 121.995 92.7143L71.4613 4.26217Z";
+const TRIANGLE_INNER = "M91.4983 8.69709C96.3418 6.08663 102.228 9.49301 102.413 15.0145L102.418 15.283V117.42C102.418 123.211 96.1849 126.848 91.2219 123.953L3.69262 72.8846C-1.17336 70.0452 -1.22541 63.0161 3.50805 60.035L3.73657 59.8963L91.2649 8.82697L91.4983 8.69709ZM101.422 15.2879C101.422 10.291 96.0601 7.18778 91.761 9.69611L4.23266 60.7645C-0.0659065 63.273 -0.0872374 69.517 4.19458 72.0154L91.7239 123.083C96.0229 125.591 101.422 122.441 101.422 117.425V15.2879Z";
+
+const WORDMARK_LETTERS = [
+  "M26.9109 16.3208H25.7109V4.83282H26.9109V9.87283H33.4389V4.83282H34.6389V16.3208H33.4389V10.9128H26.9109V16.3208Z",
+  "M40.4586 16.4808C38.0906 16.4808 36.5226 14.7048 36.5226 12.0328C36.5226 9.56883 38.1546 7.72883 40.3946 7.72883C42.7946 7.72883 44.3626 9.66483 44.1706 12.3688H37.6426C37.7386 14.3688 38.7946 15.6008 40.4426 15.6008C41.8506 15.6008 42.8266 14.8168 43.0986 13.4728H44.2026C43.8186 15.3448 42.3946 16.4808 40.4586 16.4808ZM40.3786 8.59283C38.8586 8.59283 37.7866 9.76083 37.6426 11.6008H43.0026C42.9066 9.71283 41.9306 8.59283 40.3786 8.59283Z",
+  "M47.1416 16.3208H46.0216V4.83282H47.1416V16.3208Z",
+  "M51.0244 5.93682C51.0244 6.43283 50.6564 6.78483 50.1124 6.78483C49.5844 6.78483 49.2164 6.43283 49.2164 5.93682C49.2164 5.45683 49.5844 5.10483 50.1124 5.10483C50.6564 5.10483 51.0244 5.45683 51.0244 5.93682ZM50.6884 16.3208H49.5684V7.88883H50.6884V16.3208Z",
+  "M56.4913 16.4808C54.1713 16.4808 52.4913 14.6408 52.4913 12.0968C52.4913 9.56883 54.1713 7.74483 56.4913 7.74483C58.8273 7.74483 60.5073 9.56883 60.5073 12.0968C60.5073 14.6408 58.8273 16.4808 56.4913 16.4808ZM56.4913 15.5048C58.1393 15.5048 59.3713 14.1928 59.3713 12.0968C59.3713 10.0328 58.1393 8.72083 56.4913 8.72083C54.8593 8.72083 53.6273 10.0328 53.6273 12.0968C53.6273 14.1928 54.8593 15.5048 56.4913 15.5048Z",
+  "M63.4384 11.4088V16.3208H62.3184V7.88883H63.3584V9.47283C63.9024 8.43283 64.9264 7.72883 66.1424 7.72883C67.9024 7.72883 69.0384 8.84883 69.0384 10.8488V16.3208H67.9184V11.2328C67.9184 9.61683 67.1824 8.70483 65.8064 8.70483C64.4944 8.70483 63.4384 9.84083 63.4384 11.4088Z"
+];
+const WORDMARK_EMBLEM = "M9.00615 0.571826C9.44173 -0.190609 10.5413 -0.190609 10.9768 0.571826L12.0247 2.40679L13.8558 1.3394L13.9983 1.26909C14.674 0.989767 15.4383 1.43214 15.5374 2.15972L15.5481 2.32085V8.5728L18.6487 14.0005C19.0535 14.7097 18.5987 15.581 17.8226 15.6871L17.6634 15.6978H15.5481V17.8267C15.5476 18.7054 14.6021 19.2572 13.8489 18.8179L8.50126 15.6978H2.31962L2.16044 15.6871C1.43599 15.588 0.991785 14.8223 1.26494 14.1441L1.33427 14.0005L2.39872 12.1373L0.560834 11.065C-0.142828 10.6544 -0.1838 9.6662 0.434858 9.18218L0.56767 9.09331L5.92216 5.96733L9.00615 0.571826ZM10.3089 15.6978L14.304 18.0289C14.4545 18.1166 14.6444 18.0061 14.6448 17.8306V15.6978H10.3089ZM2.12236 14.4507C2.03647 14.6019 2.14568 14.7895 2.31962 14.7896H6.94462L3.18193 12.5943L2.12236 14.4507ZM15.5481 14.7896H17.6634C17.8374 14.7895 17.9466 14.6019 17.8606 14.4507L15.5481 10.4029V14.7896ZM6.59013 6.62944L3.63408 11.8033L8.75224 14.7896H14.6448V8.82085L11.6917 3.65288L6.59013 6.62944ZM1.01787 9.8814C0.867264 9.96935 0.866813 10.1884 1.01689 10.2759L2.8499 11.3453L5.02177 7.54448L1.01787 9.8814ZM14.6448 2.32476C14.6448 2.14972 14.4566 2.04086 14.306 2.12847L12.4759 3.19585L14.6448 6.99175V2.32476ZM10.1888 1.02202C10.1016 0.869536 9.88135 0.869532 9.79423 1.02202L7.49052 5.05327L11.2415 2.86479L10.1888 1.02202Z";
+
+function wordmarkSVG(idSuffix) {
+  return `<svg viewBox="0 0 70 19" fill="none" aria-hidden="true">
+    <defs><linearGradient id="wm-${idSuffix}" x1="0" y1="0" x2="20.1386" y2="1.54758" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4977FF"/><stop offset="1" stop-color="#D2BDFF"/>
+    </linearGradient></defs>
+    <path fill="url(#wm-${idSuffix})" fill-rule="evenodd" clip-rule="evenodd" d="${WORDMARK_EMBLEM}"/>
+    ${WORDMARK_LETTERS.map(d => `<path fill="white" d="${d}"/>`).join('')}
+  </svg>`;
+}
+
+/* ================================================================
+   DOM build
+================================================================ */
+const $ = id => document.getElementById(id);
+const lenis = window.Lenis ? new Lenis({ smoothWheel: true }) : null;
+function scrollToSel(sel) {
+  const el = document.querySelector(sel);
+  if (!el) return;
+  if (lenis) lenis.scrollTo(el, { offset: 0 });
+  else el.scrollIntoView({ behavior: 'smooth' });
+}
+
+/* nav */
+const NAV_LINKS = [['Home', '#hero'], ['Services', '#sitemap'], ['Works', '#timeline'], ['About', '#impact']];
+$('wordmark-a').innerHTML = wordmarkSVG('a');
+$('wordmark-b').innerHTML = wordmarkSVG('b');
+NAV_LINKS.forEach(([label, target]) => {
+  const li = document.createElement('li');
+  const a = document.createElement('a');
+  a.href = target; a.textContent = label; a.dataset.scroll = target;
+  li.appendChild(a); $('nav-links').appendChild(li);
+  if (!reduced) {
+    const s = spring({ value: 0, target: 0, tension: 320, friction: 22, onUpdate: v => {
+      a.style.opacity = (0.68 + 0.32 * v).toFixed(3);
+      a.style.transform = `translateY(${(-v).toFixed(3)}px)`;
+    }});
+    a.addEventListener('mouseenter', () => { s.t = 1; });
+    a.addEventListener('mouseleave', () => { s.t = 0; });
+  }
+});
+document.querySelectorAll('[data-hover]').forEach(el => hoverScale(el, 1.04));
+hoverScale($('nav-cta'), 1.04);
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-scroll]');
+  if (!t) return;
+  e.preventDefault();
+  scrollToSel(t.dataset.scroll);
+});
+
+/* mobile nav */
+const burger = $('burger'), sheet = $('sheet');
+let sheetOpen = false;
+NAV_LINKS.forEach(([label, target]) => {
+  const a = document.createElement('a');
+  a.href = target; a.textContent = label; a.dataset.scroll = target; a.dataset.target = target;
+  sheet.appendChild(a);
+});
+const mCta = document.createElement('button');
+mCta.className = 'cta-pill'; mCta.dataset.scroll = '#sitemap';
+mCta.innerHTML = '<span>Send Request</span><i class="dot"></i>';
+sheet.appendChild(mCta);
+const bars = burger.querySelectorAll('span');
+const bSpring = spring({ value: 0, target: 0, tension: 320, friction: 26, onUpdate: v => {
+  bars[0].style.transform = `translateY(${(v * 4).toFixed(2)}px) rotate(${(v * 45).toFixed(2)}deg)`;
+  bars[1].style.opacity = (1 - v).toFixed(3);
+  bars[2].style.transform = `translateY(${(-v * 4).toFixed(2)}px) rotate(${(-v * 45).toFixed(2)}deg)`;
+}});
+const sSpring = spring({ value: 0, target: 0, tension: 260, friction: 30, onUpdate: v => {
+  sheet.style.opacity = v.toFixed(3);
+  sheet.style.transform = `translateY(${((1 - v) * -12).toFixed(2)}px)`;
+  sheet.style.visibility = v > 0.02 ? 'visible' : 'hidden';
+}});
+function setSheet(open) {
+  sheetOpen = open;
+  burger.setAttribute('aria-expanded', String(open));
+  bSpring.t = open ? 1 : 0;
+  sSpring.t = open ? 1 : 0;
+  if (open) {
+    sheet.querySelectorAll('a').forEach(a => a.classList.toggle('active', a.dataset.target === '#' + scrollState.active));
+  }
+}
+burger.addEventListener('click', () => setSheet(!sheetOpen));
+sheet.addEventListener('click', e => { if (e.target.closest('[data-scroll]')) setSheet(false); });
+
+/* hero icon — twin spinning triangles */
+function triangleSVG(path, gradId, x1, y1, x2, y2) {
+  return `<svg viewBox="0 0 124 125" fill="none" aria-hidden="true">
+    <defs><linearGradient id="${gradId}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4977FF"/><stop offset="1" stop-color="#D2BDFF"/>
+    </linearGradient></defs>
+    <path d="${path}" fill="black"/>
+    <path d="${path}" fill="url(#${gradId})" fill-rule="evenodd" clip-rule="evenodd"/>
+  </svg>`;
+}
+$('hero-icon').innerHTML =
+  triangleSVG(TRIANGLE_OUTER, 'gTriO', 7.82, 0, 131.918, 10.8003) +
+  triangleSVG(TRIANGLE_INNER, 'gTriI', 0, 7.80292, 109.856, 15.2501);
+const triOuterEl = $('hero-icon').children[0];
+const triInnerEl = $('hero-icon').children[1];
+
+/* contact form (row layout; stacks via CSS below 855px) */
+function contactForm() {
+  const f = document.createElement('form');
+  f.className = 'contact';
+  f.innerHTML = `
+    <input type="text" name="name" placeholder="Name" aria-label="Name" autocomplete="name">
+    <input type="email" name="email" placeholder="Email" aria-label="Email" autocomplete="email">
+    <button type="submit" class="submit">
+      <span class="chev"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M9 6l6 6-6 6" stroke="#05060F" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+      <span>Send Request</span>
+    </button>`;
+  f.addEventListener('submit', e => e.preventDefault());
+  hoverScale(f.querySelector('.submit'), 1.03);
+  return f;
+}
+$('hero-form').appendChild(contactForm());
+$('imp-form').appendChild(contactForm());
+
+/* headings & copy */
+buildHeading($('hero-h'), [
+  { text: "We don't design brands.", bright: 'left' },
+  { text: "We give them gravity.", bright: 'right' }
+]);
+splitWords($('hero-sub'), "Identity, art direction, and web — engineered to attract, not to be scrolled past.");
+
+const SVC_LINES = [
+  { text: "Brand Identity.", bright: 'left' },
+  { text: "Systems that hold.", bright: 'right' }
+];
+buildHeading($('svc-h'), SVC_LINES);
+buildHeading($('svc-mh'), SVC_LINES);
+splitWords($('svc-foot'), "We shape identity, art direction, and web into something people can't look away from — polished until it shines.");
+splitWords($('svc-mfoot'), "We shape identity, art direction, and web into something people can't look away from — polished until it shines.");
+
+const TL_LINES = [
+  { text: "From signal", bright: 'left' },
+  { text: "to system.", bright: 'right' }
+];
+buildHeading($('tl-h'), TL_LINES);
+buildHeading($('tlm-h'), TL_LINES);
+
+buildHeading($('imp-h'), [
+  { text: "Thousands of parts.", bright: 'left' },
+  { text: "One point of gravity.", bright: 'right' }
+]);
+splitWords($('imp-sub'), "Every element pulled into a single mark — the whole system, made visible.");
+
+/* services cells */
+const SVC = {
+  left: [['Identity', 'Built to hold'], ['Motion', 'Built to move']],
+  right: [['Art Direction', 'Built to lead'], ['Web', 'Built to last']]
+};
+const svcCells = [];
+['left', 'right'].forEach(side => {
+  SVC[side].forEach((c, i) => {
+    const d = document.createElement('div');
+    d.className = 'svc-cell' + (side === 'right' ? ' svc-right' : '');
+    d.style.top = (i === 0 ? 367 : 478) + 'px';
+    d.style.left = (side === 'left' ? 50 : 990) + 'px';
+    d.innerHTML = `<h3>${c[0]}</h3><p>${c[1]}</p><div class="svc-rule${side === 'right' ? ' alt' : ''}"></div>`;
+    if (!reduced) d.style.opacity = '0';
+    d.dataset.delay = (side === 'left' ? 260 : 300) + i * 90;
+    $('svc-frame').appendChild(d);
+    svcCells.push(d);
+  });
+});
+const svcMCells = [];
+[SVC.left[0], SVC.right[0], SVC.left[1], SVC.right[1]].forEach(c => {
+  const d = document.createElement('div');
+  d.className = 'svc-mcell';
+  d.innerHTML = `<h3>${c[0]}</h3><p>${c[1]}</p><div class="svc-rule"></div>`;
+  if (!reduced) d.style.opacity = '0';
+  $('svc-mlist').appendChild(d);
+  svcMCells.push(d);
+});
+
+/* timeline stations */
+const TL = [
+  ['01', 'Discovery', "We map the field — audience, market, and the pull your brand needs to exert."],
+  ['02', 'Identity', "The core system: marks, type, and rules, engineered to hold under load."],
+  ['03', 'Art Direction', "A visual language with a point of view — directed to lead, never to follow."],
+  ['04', 'Motion', "Every transition is spring-built, so the brand moves the way it means to."],
+  ['05', 'Web', "The experience, engineered to last — fast, precise, impossible to scroll past."]
+];
+const FIRST_X = 73, STEP_GAP = 605, BASELINE_Y = 754, CONTENT_TOP = 579,
+      TICK_OFFSET = 20, TICK_HEIGHT = 174, TRI_SIZE = 19, ITEM_WIDTH = 405, SIDE_MARGIN = 73;
+const TL_N = TL.length;
+const TL_LAST_X = FIRST_X + (TL_N - 1) * STEP_GAP;
+const TL_TRAVEL = (TL_N - 1) * STEP_GAP;
+const TL_TRACK_W = TL_LAST_X + ITEM_WIDTH + SIDE_MARGIN;
+const tlTrack = $('tl-track');
+tlTrack.style.width = TL_TRACK_W + 'px';
+const tlBaseline = document.createElement('div');
+tlBaseline.className = 'tl-baseline';
+tlBaseline.style.width = (TL_TRACK_W - 100) + 'px';
+if (!reduced) tlBaseline.style.transform = 'scaleX(0)';
+tlTrack.appendChild(tlBaseline);
+const tlTicks = [], tlMarkers = [], tlContents = [], tlmItems = [];
+function markerSVG(size, gid) {
+  return `<svg viewBox="0 0 19 19" fill="none" aria-hidden="true" style="width:${size}px;height:${size}px">
+    <defs><linearGradient id="${gid}" x1="0" y1="0" x2="19" y2="19" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4977FF"/><stop offset="1" stop-color="#D2BDFF"/>
+    </linearGradient></defs>
+    <path d="M9.5 0L19 19H0L9.5 0Z" fill="url(#${gid})"/>
+  </svg>`;
+}
+TL.forEach((st, i) => {
+  const x = FIRST_X + i * STEP_GAP;
+  const tick = document.createElement('div');
+  tick.className = 'tl-tick';
+  tick.style.left = (x - TICK_OFFSET) + 'px';
+  if (!reduced) tick.style.transform = 'scaleY(0)';
+  tlTrack.appendChild(tick); tlTicks.push(tick);
+
+  const mk = document.createElement('div');
+  mk.className = 'tl-marker';
+  mk.style.left = (x - TICK_OFFSET - TRI_SIZE / 2) + 'px';
+  mk.style.top = (BASELINE_Y - TRI_SIZE) + 'px';
+  mk.innerHTML = markerSVG(TRI_SIZE, 'gTri' + i);
+  if (!reduced) { mk.style.opacity = '0'; mk.style.transform = 'scale(0.4)'; }
+  tlTrack.appendChild(mk); tlMarkers.push(mk);
+
+  const ct = document.createElement('div');
+  ct.className = 'tl-content';
+  ct.style.left = x + 'px';
+  ct.innerHTML = `<div class="tl-group"><span class="tl-idx">${st[0]}</span><h3>${st[1]}</h3></div><p>${st[2]}</p>`;
+  if (!reduced) ct.style.opacity = '0';
+  tlTrack.appendChild(ct); tlContents.push(ct);
+
+  const li = document.createElement('li');
+  li.className = 'tlm-item';
+  li.innerHTML = `<span class="tlm-tri">${markerSVG(14, 'gTriM' + i)}</span><span class="tlm-idx">${st[0]}</span><h3>${st[1]}</h3><p>${st[2]}</p>`;
+  if (!reduced) li.style.opacity = '0';
+  $('tlm-list').appendChild(li); tlmItems.push(li);
+});
+
+/* ================================================================
+   scroll model & section controller
+================================================================ */
+const scrollState = {
+  active: 'none', s1: 0, s2: 0, t1: 0, t2: 0, tlp: 0,
+  dive: 0, burstPhase: 0, exit: 0, logoAmt: 0
+};
+const anchors = { hero: $('hero'), sitemap: $('sitemap'), timeline: $('timeline'), impact: $('impact') };
+const rects = {};
+let tlmOverflow = 0;
+function measure() {
+  const sy = window.scrollY;
+  for (const k in anchors) {
+    const r = anchors[k].getBoundingClientRect();
+    rects[k] = { top: r.top + sy, height: r.height, bottom: r.bottom + sy };
+  }
+  const win = $('tlm-window'), list = $('tlm-list');
+  tlmOverflow = (mqMobile.matches && win) ? Math.max(0, list.scrollHeight - win.clientHeight) : 0;
+}
+
+const ovHero = $('ov-hero'), ovServices = $('ov-services'), ovTimeline = $('ov-timeline'), ovImpact = $('ov-impact');
+const sceneWrap = $('scene-wrap');
+function setOverlay(el, op, drift) {
+  el.style.opacity = op.toFixed(3);
+  el.style.visibility = op > 0.005 ? 'visible' : 'hidden';
+  el.style.transform = drift ? `translateY(${drift.toFixed(2)}px)` : '';
+}
+
+/* 1440x800 design frame scaling */
+function layoutFrames() {
+  const w = innerWidth, h = innerHeight;
+  const contain = Math.min(w / 1440, h / 800);
+  const widthS = w / 1440;
+  document.querySelectorAll('.frame').forEach(f => {
+    if (mqMobile.matches) { f.style.transform = ''; return; }
+    const s = f.dataset.fit === 'width' ? widthS : contain;
+    f.style.transform = `translate(-50%,-50%) scale(${s.toFixed(5)})`;
+  });
+  const nd = document.querySelector('.nav-desktop');
+  nd.style.top = (10 * contain).toFixed(2) + 'px';
+  nd.style.transform = `translateX(-50%) scale(${contain.toFixed(5)})`;
+}
+
+/* section entrances — latch once */
+const latched = { hero: false, services: false, timeline: false, impact: false };
+function revealNav() {
+  document.querySelectorAll('.nav-rev').forEach((el, i) => {
+    if (reduced) { el.style.opacity = '1'; return; }
+    el.style.opacity = '0';
+    tween({
+      delay: 120 + i * 100, dur: 1000, ease: easeReveal,
+      update: e => {
+        el.style.opacity = e.toFixed(3);
+        el.style.transform = `translateY(${((1 - e) * -10).toFixed(2)}px)`;
+        el.style.filter = `blur(${((1 - e) * 6).toFixed(2)}px)`;
+      },
+      done: () => { el.style.filter = ''; el.style.transform = ''; }
+    });
+  });
+}
+function revealHero() {
+  revealHeading($('hero-h'), 150);
+  springRevealEl($('hero-mark'), { delay: 300, dur: 1200, y: 0, blur: 10, scale: 0.82 });
+  revealWords($('hero-sub'), 520);
+  springRevealEl($('hero-form'), { delay: 720, dur: 1200, y: 24, blur: 8 });
+}
+function revealServices() {
+  revealHeading($('svc-h'), 120);
+  revealHeading($('svc-mh'), 120);
+  svcCells.forEach(d => springRevealEl(d, { delay: +d.dataset.delay, dur: 1400, y: 24, blur: 8 }));
+  svcMCells.forEach((d, i) => springRevealEl(d, { delay: 260 + i * 90, dur: 1400, y: 24, blur: 8 }));
+  revealWords($('svc-foot'), 520);
+  revealWords($('svc-mfoot'), 520);
+}
+function revealTimeline() {
+  revealHeading($('tl-h'), 120);
+  revealHeading($('tlm-h'), 120);
+  revealCustom(tlBaseline, { delay: 120, dur: 1400, apply: e => { tlBaseline.style.transform = `scaleX(${e.toFixed(4)})`; } });
+  tlTicks.forEach((t, i) => revealCustom(t, { delay: 200 + i * 120, dur: 1000, apply: e => { t.style.transform = `scaleY(${e.toFixed(4)})`; } }));
+  tlMarkers.forEach((m, i) => revealCustom(m, { delay: 200 + i * 120, dur: 1000, apply: e => {
+    m.style.opacity = e.toFixed(3);
+    m.style.transform = `scale(${(0.4 + 0.6 * e).toFixed(4)})`;
+  }}));
+  tlContents.forEach((c, i) => springRevealEl(c, { delay: 200 + i * 120 + 120, dur: 1200, y: 26, blur: 8 }));
+  tlmItems.forEach((li, i) => springRevealEl(li, { delay: 200 + i * 100, dur: 1000, y: 20, blur: 6 }));
+}
+function revealImpact() {
+  revealHeading($('imp-h'), 150);
+  revealWords($('imp-sub'), 520);
+  springRevealEl($('imp-form'), { delay: 720, dur: 1200, y: 24, blur: 8 });
+}
+
+/* ================================================================
+   the WebGL scene
+================================================================ */
+const startTime = performance.now();
+let loaded = false, appearStart = 0, loadP = 0, railV = 0;
+let warpDestroyStart = 0, warpDead = false;
+let frozenTime = null;
+
+const isCoarse = matchMedia('(pointer: coarse)').matches;
+const tier = (innerWidth < 768 || isCoarse) ? 'mobile' : (innerWidth < 1180 ? 'tablet' : 'desktop');
+const MORPH = { desktop: [520, 230], tablet: [340, 170], mobile: [150, 80] }[tier];
+const STAR_COUNT = { desktop: 3600, tablet: 2200, mobile: 700 }[tier];
+const DUST_COUNT = { desktop: 650, tablet: 400, mobile: 120 }[tier];
+const MARK_COUNT = Math.min(24000, Math.round(19900 * { desktop: 1, tablet: 0.7, mobile: 0.38 }[tier]));
+const MOTE_COUNT = { desktop: 1400, tablet: 800, mobile: 240 }[tier];
+const FRAME_INTERVAL = tier === 'mobile' ? 1000 / 30 : (tier === 'tablet' ? 1000 / 45 : 0);
+let viewScale = Math.min(1, Math.max(0.5, innerHeight / 1080));
+
+const C = h => new THREE.Color(h);
+const accent200 = 0xd6e2ff, accent300 = 0x9fb8ff, accent400 = 0x6d8bff, accent500 = 0x3a5cff,
+      accent600 = 0x2340b8, accent700 = 0x12266b, accent900 = 0x030716;
+const signalGlow = 0x6799fe, signalRing = 0x00ffaa, foreground = 0xffffff;
+
+const rotation = (x, y, z) => new THREE.Matrix3().setFromMatrix4(new THREE.Matrix4().makeRotationFromEuler(new THREE.Euler(x, y, z)));
+// rotate a disc-local point into world
+const fromDiscFrame = (x, y, z) => { const c = Math.cos(0.95), s = Math.sin(0.95); return [x, y * c - z * s, y * s + z * c]; };
+
+let renderer = null, scene, camera, composer, finalPass;
+let morphPts, morphU, starPts, starU, dustPts, dustU;
+let markGroup, markPts, markU, motePts, moteU, warpMesh, warpU;
+
+const pointer = { x: 0, y: 0, active: 0 };
+addEventListener('pointermove', e => {
+  if (e.pointerType && e.pointerType !== 'mouse') return;
+  pointer.x = (e.clientX / innerWidth) * 2 - 1;
+  pointer.y = -(e.clientY / innerHeight) * 2 + 1;
+  pointer.active = 1;
+}, { passive: true });
+
+/* ---------------- shaders (verbatim) ---------------- */
+const MORPH_VERT = `
+attribute vec4 aUni;    // (ellipse radius, height, life phase, twin)
+attribute vec4 aBurst;  // (filament point xyz, distance along filament)
+attribute vec2 aSeed;   // (general seed, per-arm brightness)
+
+uniform float iTime; uniform float uAlpha; uniform vec2 uRes;
+uniform float uT1; uniform float uT2;
+uniform float uNeedUni; uniform float uNeedBurst; uniform float uNeedMael;
+uniform vec3 uPointer; uniform vec3 uPointerAxis;
+uniform float uPointerR; uniform float uPointerPush;
+uniform float uPointerSwirl; uniform float uPointerGlow;
+uniform float uStagger; uniform float uMidBoost;
+uniform float uArc1; uniform float uSwirl1; uniform float uArc2; uniform float uSwirl2;
+
+uniform float uUniTime; uniform mat3 uUniRot; uniform float uUniScale;
+uniform float uUniEllipse; uniform float uUniLife; uniform float uUniSpawnSpread;
+uniform float uUniOmega; uniform float uUniV0; uniform float uUniDecay;
+uniform float uUniSize; uniform float uUniBright;
+
+uniform float uBurstScale; uniform float uBurstSway; uniform float uBurstSwaySpeed;
+uniform float uBurstShimmer; uniform float uBurstShimmerSpeed;
+uniform float uBurstTipFade; uniform float uBurstSize; uniform float uBurstBright;
+
+uniform mat3 uMaelRot; uniform float uRInner; uniform float uROuter;
+uniform float uSpin; uniform float uMaelTwinkle;
+uniform float uCrescent; uniform float uCrescentAngle;
+uniform float uMaelSize; uniform float uMaelBright; uniform float uMaelPhase;
+
+uniform vec3 uUniDeep; uniform vec3 uUniMid; uniform vec3 uUniBrightC;
+uniform vec3 uBurstCore; uniform vec3 uBurstInner;
+uniform vec3 uBurstMid; uniform vec3 uBurstOuter;
+uniform vec3 uArm; uniform vec3 uArmHot; uniform vec3 uMaelCore; uniform vec3 uPink;
+
+varying vec3 vCol; varying float vB;
+#define TAU 6.2831853
+
+vec2 rot2(vec2 v, float a) {
+  float c = cos(a), s = sin(a);
+  return vec2(v.x * c - v.y * s, v.x * s + v.y * c);
+}
+
+float stagger(float t, float seed) {
+  float s = clamp(t * (1.0 + uStagger) - seed * uStagger, 0.0, 1.0);
+  return s * s * (3.0 - 2.0 * s);
+}
+
+void main() {
+  float seed = aSeed.x;
+
+  vec3 pUni = vec3(0.0);
+  vec3 cUni = uUniDeep;
+  float bUni = 0.0;
+  float sUni = 1.0;
+
+  if (uNeedUni > 0.5) {
+    float born = uUniTime / uUniLife - aUni.z * uUniSpawnSpread;
+    float alive = step(0.0, born);
+    float life = fract(max(born, 0.0));
+    float age = life * uUniLife;
+
+    float ang = uUniOmega * (uUniTime - age);
+    float radius = aUni.x + uUniV0 * age - uUniDecay * age * age;
+
+    pUni = vec3(cos(ang) * radius * uUniEllipse, aUni.y, sin(ang) * radius);
+    pUni.xz *= mix(1.0, -1.0, aUni.w);
+    pUni = uUniRot * pUni * uUniScale;
+
+    bUni = alive * smoothstep(0.0, 0.14, life)
+         * (1.0 - smoothstep(0.18, 1.0, life)) * uUniBright;
+
+    cUni = uUniDeep;
+    cUni = mix(cUni, uUniMid, step(0.34, seed));
+    cUni = mix(cUni, uUniBrightC, step(0.67, seed));
+    cUni = mix(cUni, uPink, step(0.94, seed));
+
+    sUni = 0.35 + 0.65 * fract(seed * 17.0);
+  }
+
+  vec3 pBurst = vec3(0.0);
+  vec3 cBurst = uBurstMid;
+  float bBurst = 0.0;
+  float sBurst = 1.0;
+
+  if (uNeedBurst > 0.5) {
+    vec3 f = aBurst.xyz;
+    float along = aBurst.w;
+
+    vec3 d = normalize(f + 1e-5);
+    vec3 ax = normalize(cross(d, abs(d.y) > 0.99 ? vec3(1.0, 0.0, 0.0) : vec3(0.0, 1.0, 0.0)));
+    vec3 ay = cross(d, ax);
+
+    float amp = uBurstSway * along;
+    float ph = seed * TAU;
+    float ts = iTime * uBurstSwaySpeed;
+    float w1 = sin(ts + ph + along * 5.0);
+    float w2 = cos(ts * 1.27 + ph * 1.7 + along * 9.0);
+    float w3 = 0.5 * sin(ts * 0.6 + ph);
+
+    f += ax * (w1 + w3) * amp;
+    f += ay * w2 * amp * 0.8;
+
+    pBurst = f * uBurstScale;
+
+    float sh = max(0.0, 0.6 + uBurstShimmer * 0.55
+      * sin(along * 16.0 - iTime * uBurstShimmerSpeed + seed * 28.0));
+
+    float fade = mix(1.15, uBurstTipFade, smoothstep(0.0, 1.0, along));
+
+    float fn = clamp((aSeed.y - 0.55) / 0.45, 0.0, 1.0);
+    float fil = 0.035 + 2.4 * pow(fn, 2.6);
+    bBurst = sh * fade * fil * uBurstBright;
+
+    cBurst = mix(uBurstInner, uBurstMid, smoothstep(0.0, 0.5, along));
+    cBurst = mix(cBurst, uBurstOuter, smoothstep(0.5, 1.0, along));
+    cBurst = mix(cBurst, uBurstCore, (1.0 - smoothstep(0.0, 0.12, along)) * 0.9);
+    cBurst = mix(cBurst, uPink, step(0.94, seed) * smoothstep(0.45, 1.0, along));
+
+    sBurst = 0.8 + 0.45 * (1.0 - along);
+  }
+
+  vec3 pMael = vec3(0.0);
+  vec3 cMael = uArm;
+  float bMael = 0.0;
+  float sMael = 1.0;
+
+  if (uNeedMael > 0.5) {
+    vec3 m = position;
+    m.xy = rot2(m.xy, iTime * uSpin);
+
+    float radius = length(position.xy);
+    float core = clamp((uROuter - radius) / (uROuter - uRInner), 0.0, 1.0);
+
+    float a2 = atan(m.y, m.x) - uCrescentAngle;
+    float d = abs(atan(sin(a2), cos(a2)));
+    float crescent = smoothstep(1.5 + uMaelPhase * 0.9, 0.0, d)
+                   * core * core * uCrescent * (1.0 + 0.5 * uMaelPhase);
+
+    pMael = uMaelRot * m;
+
+    float tw = 1.0 - uMaelTwinkle * (0.5 + 0.5 * sin(iTime * 3.0 + seed * TAU));
+    float bright = aSeed.y * (0.3 + 0.7 * core);
+
+    cMael = mix(mix(uArm, uArmHot, uMaelPhase), uMaelCore, core * core);
+    cMael = mix(cMael, uPink, clamp(crescent, 0.0, 1.0));
+
+    bMael = (bright * tw * (0.7 + core) + crescent * 1.5)
+          * uMaelBright * (1.0 + 0.18 * uMaelPhase);
+    sMael = 1.0 + core * 1.1 + crescent * 1.6;
+  }
+
+  float t1 = stagger(uT1, seed);
+  float t2 = stagger(uT2, fract(seed * 3.7 + 0.31));
+
+  vec3 dir = normalize(vec3(
+    sin(seed * 91.3 + 0.7),
+    cos(seed * 57.1 + 2.1),
+    sin(seed * 33.7 + 4.3)
+  ) + 1e-4);
+
+  vec3 p = mix(pUni, pBurst, t1);
+  float mid1 = 4.0 * t1 * (1.0 - t1);
+  p += dir * (uArc1 * mid1);
+  p.xz = rot2(p.xz, mid1 * uSwirl1 * (0.6 + 0.8 * seed));
+
+  p = mix(p, pMael, t2);
+  float mid2 = 4.0 * t2 * (1.0 - t2);
+  p += dir * (uArc2 * mid2);
+  p.xz = rot2(p.xz, mid2 * uSwirl2 * (0.6 + 0.8 * seed));
+
+  vec3 pd = p - uPointer;
+  float pl = length(pd);
+  float infl = exp(-(pl * pl) / max(0.001, uPointerR * uPointerR));
+  vec3 pdir = normalize(pd + 1e-4);
+  p += pdir * (infl * uPointerPush);
+  p += normalize(cross(uPointerAxis, pdir) + 1e-4) * (infl * uPointerSwirl);
+
+  vCol = mix(mix(cUni, cBurst, t1), cMael, t2);
+  vB = mix(mix(bUni, bBurst, t1), bMael, t2)
+     * uAlpha * (1.0 + uMidBoost * (mid1 + mid2))
+     * (1.0 + infl * uPointerGlow);
+
+  if (vB < 0.004) {
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    gl_PointSize = 0.0;
+    return;
+  }
+
+  float size = mix(
+    mix(uUniSize * sUni, uBurstSize * sBurst, t1),
+    uMaelSize * sMael,
+    t2
+  );
+
+  vec4 mv = modelViewMatrix * vec4(p, 1.0);
+  gl_PointSize = clamp(size * uRes.y / 1000.0 / -mv.z, 1.0, 15.0);
+  gl_Position = projectionMatrix * mv;
+}
+`;
+
+const MORPH_FRAG = `
+uniform float uCoreStrength; uniform float uCoreSize; uniform float uCoreSharp;
+uniform float uHaloAmount; uniform float uHaloWidth; uniform float uHaloFalloff;
+varying vec3 vCol; varying float vB;
+
+void main() {
+  float pd = length(2.0 * gl_PointCoord - 1.0);
+  if (pd > 1.0) discard;
+  float core = pow(max(0.0, 1.0 - pd / max(0.001, uCoreSize)), uCoreSharp) * uCoreStrength;
+  float halo = pow(max(0.0, 1.0 - pd / max(0.001, uHaloWidth)), uHaloFalloff) * uHaloAmount;
+  float mask = (core + halo) * vB;
+  if (mask <= 0.006) discard;
+  gl_FragColor = vec4(vCol, mask);
+}
+`;
+
+const STAR_VERT = `
+attribute float aSize; attribute float aSeed; attribute float aPink;
+uniform float iTime; uniform float uAlpha; uniform float uSize; uniform float uBright; uniform float uViewScale;
+uniform vec3 uCool; uniform vec3 uPink;
+varying vec3 vCol; varying float vB;
+#define TAU 6.2831853
+void main() {
+  float tw = 0.6 + 0.4 * sin(iTime * 1.4 + aSeed * TAU);
+  vCol = mix(uCool, uPink, aPink);
+  vB = aSize * tw * uBright * uAlpha;
+  vec4 mv = modelViewMatrix * vec4(position, 1.0);
+  gl_PointSize = clamp(aSize * uSize * uViewScale * (300.0 / -mv.z), 0.5, 10.0);
+  gl_Position = projectionMatrix * mv;
+}
+`;
+
+const STAR_FRAG = `
+varying vec3 vCol; varying float vB;
+void main() {
+  float d = length(gl_PointCoord - 0.5);
+  if (d > 0.5) discard;
+  gl_FragColor = vec4(vCol, vB * smoothstep(0.5, 0.08, d));
+}
+`;
+
+const DUST_VERT = `
+attribute float aSeed;
+uniform float iTime; uniform float uAlpha; uniform float uViewScale;
+varying float vB;
+#define TAU 6.2831853
+void main() {
+  vec3 p = position;
+  p.x += sin(iTime * 0.2 + aSeed * TAU) * 1.4;
+  p.y += cos(iTime * 0.17 + aSeed * TAU) * 1.1;
+  vB = (0.10 + 0.10 * sin(iTime * 0.8 + aSeed * 12.0)) * uAlpha;
+  vec4 mv = modelViewMatrix * vec4(p, 1.0);
+  gl_PointSize = clamp((1.0 + aSeed * 2.0) * uViewScale * (200.0 / -mv.z), 0.8, 44.0);
+  gl_Position = projectionMatrix * mv;
+}
+`;
+
+const DUST_FRAG = `
+uniform vec3 uColor; varying float vB;
+void main() {
+  float d = length(gl_PointCoord - 0.5);
+  if (d > 0.5) discard;
+  gl_FragColor = vec4(uColor, vB * smoothstep(0.5, 0.0, d));
+}
+`;
+
+const MARK_VERT = `
+attribute vec3 aTarget; attribute float aSeed; attribute float aSize; attribute float aTri;
+uniform float uProgress; uniform float uTime; uniform float uAlpha; uniform float uPointScale; uniform float uViewScale;
+uniform vec3 uColorA; uniform vec3 uColorB;
+varying vec3 vCol; varying float vB;
+#define TAU 6.2831853
+void main() {
+  float e = smoothstep(0.0, 1.0, clamp(uProgress * 1.35 - aSeed * 0.35, 0.0, 1.0));
+  float speed = (aTri < 0.5) ? 0.39 : 0.70;
+  float a = uTime * speed;
+  float cs = cos(a), sn = sin(a);
+  vec3 tgt = aTarget;
+  tgt.xy = mat2(cs, -sn, sn, cs) * aTarget.xy;
+  vec3 p = mix(position, tgt, e);
+  float idle = e;
+  p.x += sin(uTime * 0.9 + aSeed * TAU) * 0.12 * idle;
+  p.y += cos(uTime * 0.8 + aSeed * TAU * 1.3) * 0.12 * idle;
+  p.z += sin(uTime * 0.7 + aSeed * 30.0) * 0.10 * idle;
+  float drift = (1.0 - e) * 0.5;
+  p.x += sin(uTime * 0.6 + aSeed * TAU) * drift;
+  p.y += cos(uTime * 0.55 + aSeed * TAU) * drift;
+  float g = clamp(aTarget.x * 0.13 + 0.5, 0.0, 1.0);
+  vCol = mix(uColorA, uColorB, g);
+  float tw = 0.7 + 0.3 * sin(uTime * 1.6 + aSeed * TAU);
+  vB = aSize * tw * uAlpha;
+  vec4 mv = modelViewMatrix * vec4(p, 1.0);
+  gl_PointSize = clamp(aSize * uPointScale * uViewScale * (300.0 / -mv.z), 0.4, 9.0);
+  gl_Position = projectionMatrix * mv;
+}
+`;
+
+const MARK_FRAG = `
+varying vec3 vCol; varying float vB;
+void main() {
+  float d = length(gl_PointCoord - 0.5);
+  if (d > 0.5) discard;
+  gl_FragColor = vec4(vCol, vB * smoothstep(0.5, 0.05, d));
+}
+`;
+
+const WARP_VERT = `
+attribute float aSeed; attribute float aSpeed; attribute float aRadius;
+attribute float aAngle; attribute float aEnd; attribute float aSide;
+uniform float iTime; uniform float uBoost; uniform float uSurge;
+uniform float uSpread; uniform float uWidth; uniform vec2 uResolution;
+varying float vEnd; varying float vB; varying float vSeed; varying float vSide;
+
+void main() {
+  float rate = 0.13 + 0.30 * uBoost + 0.55 * uSurge;
+  float life = fract(iTime * aSpeed * rate + aSeed);
+  float e = life * life;
+  float z = -mix(60.0, 1.2, e);
+  float len = (1.5 + 11.0 * e) * (0.3 + 0.9 * uBoost) * (1.0 + 3.5 * uSurge);
+  float a = aAngle + iTime * 0.06;
+  float r = aRadius * uSpread;
+  vec2 xy = vec2(cos(a) * r, sin(a) * r);
+  vec4 headClip = projectionMatrix * modelViewMatrix * vec4(xy, z, 1.0);
+  vec4 tailClip = projectionMatrix * modelViewMatrix * vec4(xy, z - len, 1.0);
+  vec4 clip = mix(tailClip, headClip, aEnd);
+  vec2 headNDC = headClip.xy / headClip.w;
+  vec2 tailNDC = tailClip.xy / tailClip.w;
+  vec2 d = (headNDC - tailNDC) * uResolution;
+  vec2 dir = length(d) > 1e-4 ? normalize(d) : vec2(0.0, 1.0);
+  vec2 normal = vec2(-dir.y, dir.x);
+  vec2 offset = normal * (aSide * uWidth * 0.5) / uResolution * 2.0;
+  clip.xy += offset * clip.w;
+  vEnd = aEnd;
+  vSeed = aSeed;
+  vSide = aSide;
+  vB = smoothstep(0.0, 0.18, life) * (0.2 + 0.8 * e);
+  gl_Position = clip;
+}
+`;
+
+const WARP_FRAG = `
+uniform float uOpacity; uniform vec3 uHead; uniform vec3 uTail; uniform vec3 uPink;
+varying float vEnd; varying float vB; varying float vSeed; varying float vSide;
+void main() {
+  vec3 col = mix(uTail, uHead, vEnd);
+  col = mix(col, uPink, step(0.94, vSeed) * pow(vEnd, 2.0));
+  float across = 1.0 - abs(vSide);
+  across *= across;
+  float alpha = pow(vEnd, 1.5) * vB * across;
+  gl_FragColor = vec4(col, alpha * uOpacity);
+}
+`;
+
+const FINAL_VERT = `
+varying vec2 vUv;
+void main() { vUv = uv; gl_Position = vec4(position, 1.0); }
+`;
+
+const FINAL_FRAG = `
+uniform float iTime; uniform sampler2D tDiffuse;
+uniform vec3 iCornerLow; uniform vec3 iCornerHigh;
+uniform float uSpread; uniform float uIntensity;
+varying vec2 vUv;
+vec3 warp3d(vec3 pos, float t) {
+  float curv = .8, a = 1.9, b = 0.7;
+  pos *= 2.;
+  pos.x += curv * sin(t + a * pos.y) + t * b;
+  pos.y += curv * cos(t + a * pos.x);
+  pos.y += curv * sin(t + a * pos.z) + t * b;
+  pos.z += curv * cos(t + a * pos.y);
+  pos.z += curv * sin(t + a * pos.x) + t * b;
+  pos.x += curv * cos(t + a * pos.z);
+  return 0.5 + 0.5 * cos(pos.xyz + vec3(1, 2, 4));
+}
+void main() {
+  vec2 uv = 2. * vUv - 1.;
+  vec3 scene = texture2D(tDiffuse, vUv).xyz;
+  float mask = smoothstep(uSpread, 1., abs(uv.y))
+             * smoothstep(-.75, 1., -uv.y * uv.x);
+  if (mask <= 0.0015) { gl_FragColor = vec4(scene, 1.); return; }
+  vec3 w = pow(warp3d(vec3(uv.x, sin(uv.y), uv.y), iTime * 1.5), vec3(1.5));
+  vec3 col = uIntensity * iCornerLow * w.x;
+  col *= w.y;
+  col += iCornerHigh * w.z * 1.35;
+  col *= mask;
+  gl_FragColor = vec4(col + scene, 1.);
+}
+`;
+
+/* ---------------- geometry builders ---------------- */
+function buildMorph() {
+  const arms = MORPH[0];
+  const perArm = Math.max(2, Math.round(MORPH[1] * 0.7)); // density factor 0.7
+  const count = arms * perArm;
+  const positions = new Float32Array(count * 3);
+  const uni = new Float32Array(count * 4);
+  const burst = new Float32Array(count * 4);
+  const seeds = new Float32Array(count * 2);
+
+  const maelRInner = 6.4, maelROuter = 48, maelTightness = 2.3, maelThickness = 0.9,
+        maelBulge = 1, maelFunnel = 1.05, burstSpread = 3, burstBend = 0.4, burstCoreStart = 0.06;
+  const gauss = () => Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(TAU * Math.random());
+  const logSpan = Math.log(maelROuter / maelRInner);
+  let k = 0;
+  for (let a = 0; a < arms; a++) {
+    const armPhase = Math.random() * TAU;
+    const armBright = 0.55 + 0.45 * Math.random();
+    // one plasma filament direction + orthonormal cross-axes
+    const bz = Math.random() * 2 - 1, bth = Math.random() * TAU, brr = Math.sqrt(1 - bz * bz);
+    const dir = new THREE.Vector3(brr * Math.cos(bth), brr * Math.sin(bth), bz);
+    const up = Math.abs(dir.y) > 0.99 ? new THREE.Vector3(1, 0, 0) : new THREE.Vector3(0, 1, 0);
+    const bu = new THREE.Vector3().crossVectors(dir, up).normalize();
+    const bv = new THREE.Vector3().crossVectors(dir, bu).normalize();
+    let len = burstSpread * (0.28 + Math.random() * Math.random() * 1.15);
+    if (Math.random() > 0.86) len *= 1.7;
+    const f1 = 2 + Math.random() * 5, f2 = 2 + Math.random() * 5, p1 = Math.random() * TAU, p2 = Math.random() * TAU;
+    const curl = 0.5 * (0.45 + Math.random());
+    const bend = new THREE.Vector3().addScaledVector(bu, Math.random() - 0.5)
+      .addScaledVector(bv, Math.random() - 0.5).normalize().multiplyScalar(burstBend * (0.4 + Math.random()));
+    const p = new THREE.Vector3();
+    for (let i = 0; i < perArm; i++) {
+      const t = perArm > 1 ? i / (perArm - 1) : 0;
+      // maelstrom: log-spiral filament point, with out-of-plane profile + funnel
+      const radius = maelRInner * Math.exp(logSpan * t) * (1 + (Math.random() - 0.5) * 0.05);
+      const angle = armPhase + maelTightness * Math.log(radius / maelRInner) + (Math.random() - 0.5) * 0.06;
+      const inner = radius / maelRInner - 1;
+      const bulge = 1 + maelBulge * Math.exp(-inner * inner * 1.6);
+      const rNorm = Math.min(1, radius / maelROuter);
+      const funnelZ = -maelFunnel * maelROuter * 0.4 * Math.pow(1 - rNorm, 1.8);
+      positions[k * 3]     = radius * Math.cos(angle);
+      positions[k * 3 + 1] = radius * Math.sin(angle);
+      positions[k * 3 + 2] = funnelZ + gauss() * 0.5 * maelThickness * (0.4 + radius * 0.03) * bulge;
+      // universe: sphere-and-tube distribution -> ellipse radius from offset focus
+      const theta = TAU * Math.random(), phi = Math.acos(2 * Math.random() - 1), sinPhi = Math.sin(phi);
+      const spread = Math.random() * (Math.random() < 0.3 ? 4 : 1) * 0.4;
+      const ux = sinPhi * Math.cos(theta) * spread, uy = sinPhi * Math.sin(theta) * spread, uz = Math.cos(phi) * spread;
+      uni[k * 4]     = Math.hypot(ux - 2.5, uz);   // ellipse radius at spawn
+      uni[k * 4 + 1] = uy;                          // height in disc
+      uni[k * 4 + 2] = Math.random();               // life phase
+      uni[k * 4 + 3] = a % 2;                       // which twin galaxy
+      // burst: point along its filament (curl through bu/bv at two freqs, bent off-axis)
+      const rad = burstCoreStart + len * t;
+      p.copy(dir).multiplyScalar(rad);
+      p.addScaledVector(bu, Math.sin(t * f1 * Math.PI + p1) * curl * t);
+      p.addScaledVector(bv, Math.cos(t * f2 * Math.PI + p2) * curl * t);
+      p.addScaledVector(bend, t * t);
+      burst[k * 4] = p.x; burst[k * 4 + 1] = p.y; burst[k * 4 + 2] = p.z; burst[k * 4 + 3] = t;
+      seeds[k * 2] = Math.random(); seeds[k * 2 + 1] = armBright;
+      k++;
+    }
+  }
+
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  g.setAttribute('aUni', new THREE.BufferAttribute(uni, 4));
+  g.setAttribute('aBurst', new THREE.BufferAttribute(burst, 4));
+  g.setAttribute('aSeed', new THREE.BufferAttribute(seeds, 2));
+
+  morphU = {
+    iTime: { value: 0 }, uAlpha: { value: 0 }, uRes: { value: new THREE.Vector2(1, 1) },
+    uT1: { value: 0 }, uT2: { value: 0 },
+    uNeedUni: { value: 1 }, uNeedBurst: { value: 0 }, uNeedMael: { value: 0 },
+    uPointer: { value: new THREE.Vector3(9999, 9999, 9999) }, uPointerAxis: { value: new THREE.Vector3(0, 0, 1) },
+    uPointerR: { value: 3.4 }, uPointerPush: { value: 0 }, uPointerSwirl: { value: 0 }, uPointerGlow: { value: 0 },
+    uStagger: { value: 0.55 }, uMidBoost: { value: 0.7 },
+    uArc1: { value: 1.1 }, uSwirl1: { value: 2.2 }, uArc2: { value: 9 }, uSwirl2: { value: 3.4 },
+    uUniTime: { value: 6 }, uUniRot: { value: rotation(1, -1.2, 0.5) }, uUniScale: { value: 1.2 },
+    uUniEllipse: { value: 1 }, uUniLife: { value: 6 }, uUniSpawnSpread: { value: 1 },
+    uUniOmega: { value: 1.2 }, uUniV0: { value: 0.72 }, uUniDecay: { value: 0.036 },
+    uUniSize: { value: 70 * viewScale }, uUniBright: { value: 0.58 * 0.75 },
+    uBurstScale: { value: 7 }, uBurstSway: { value: 0.08 }, uBurstSwaySpeed: { value: 1.1 },
+    uBurstShimmer: { value: 0.55 }, uBurstShimmerSpeed: { value: 3 },
+    uBurstTipFade: { value: 0.42 }, uBurstSize: { value: 44 * 1.55 * viewScale }, uBurstBright: { value: 0.85 * 1.1 },
+    uMaelRot: { value: rotation(0.95, 0, 0) }, uRInner: { value: 6.4 }, uROuter: { value: 48 },
+    uSpin: { value: 0.085 * 3 }, uMaelTwinkle: { value: 0.75 },
+    uCrescent: { value: 0.9 }, uCrescentAngle: { value: -0.7 },
+    uMaelSize: { value: 62 * 1.55 * viewScale }, uMaelBright: { value: 0.56 * 0.95 }, uMaelPhase: { value: 0 },
+    uUniDeep: { value: C(accent500) }, uUniMid: { value: C(accent400) }, uUniBrightC: { value: C(accent200) },
+    uBurstCore: { value: C(foreground) }, uBurstInner: { value: C(accent200) },
+    uBurstMid: { value: C(accent500) }, uBurstOuter: { value: C(accent600) },
+    uArm: { value: C(accent500) }, uArmHot: { value: C(accent300) }, uMaelCore: { value: C(accent700) },
+    uPink: { value: C(signalGlow) },
+    uCoreStrength: { value: 1.5 }, uCoreSize: { value: 0.5 }, uCoreSharp: { value: 2.4 },
+    uHaloAmount: { value: 0.6 }, uHaloWidth: { value: 1 }, uHaloFalloff: { value: 1.5 }
+  };
+  const m = new THREE.ShaderMaterial({
+    uniforms: morphU, vertexShader: MORPH_VERT, fragmentShader: MORPH_FRAG,
+    blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false, transparent: true
+  });
+  morphPts = new THREE.Points(g, m);
+  morphPts.frustumCulled = false;
+  scene.add(morphPts);
+}
+
+function buildStarfield() {
+  // stars — far shell
+  {
+    const n = STAR_COUNT;
+    const pos = new Float32Array(n * 3), aSize = new Float32Array(n), aSeed = new Float32Array(n), aPink = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const z = Math.random() * 2 - 1, th = Math.random() * TAU, rr = Math.sqrt(1 - z * z);
+      const r = 70 + Math.random() * 160;
+      pos[i * 3] = rr * Math.cos(th) * r;
+      pos[i * 3 + 1] = rr * Math.sin(th) * r;
+      pos[i * 3 + 2] = z * r - 40; // depthBias
+      aSize[i] = 0.14 + Math.pow(Math.random(), 8) * 0.85;
+      aSeed[i] = Math.random();
+      aPink[i] = Math.random() < 0.12 ? 1 : 0;
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.setAttribute('aSize', new THREE.BufferAttribute(aSize, 1));
+    g.setAttribute('aSeed', new THREE.BufferAttribute(aSeed, 1));
+    g.setAttribute('aPink', new THREE.BufferAttribute(aPink, 1));
+    starU = {
+      iTime: { value: 0 }, uAlpha: { value: 0 }, uSize: { value: 1.5 }, uBright: { value: 2 },
+      uViewScale: { value: viewScale }, uCool: { value: C(accent200) }, uPink: { value: C(signalRing) }
+    };
+    const m = new THREE.ShaderMaterial({
+      uniforms: starU, vertexShader: STAR_VERT, fragmentShader: STAR_FRAG,
+      blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false, transparent: true
+    });
+    starPts = new THREE.Points(g, m);
+    starPts.frustumCulled = false;
+    scene.add(starPts);
+  }
+  // near dust motes
+  {
+    const n = DUST_COUNT;
+    const pos = new Float32Array(n * 3), aSeed = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      pos[i * 3] = (Math.random() - 0.5) * 90;
+      pos[i * 3 + 1] = (Math.random() - 0.5) * 60;
+      pos[i * 3 + 2] = (Math.random() - 0.5) * 50 + 10; // biased toward the camera
+      aSeed[i] = Math.random();
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    g.setAttribute('aSeed', new THREE.BufferAttribute(aSeed, 1));
+    dustU = {
+      iTime: { value: 0 }, uAlpha: { value: 0 }, uViewScale: { value: viewScale }, uColor: { value: C(accent500) }
+    };
+    const m = new THREE.ShaderMaterial({
+      uniforms: dustU, vertexShader: DUST_VERT, fragmentShader: DUST_FRAG,
+      blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false, transparent: true
+    });
+    dustPts = new THREE.Points(g, m);
+    dustPts.frustumCulled = false;
+    scene.add(dustPts);
+  }
+}
+
+function rasterizeMarkTargets() {
+  const S = 4, W = 124 * S, H = 125 * S;
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d', { willReadFrequently: true });
+  const lists = [];
+  [TRIANGLE_OUTER, TRIANGLE_INNER].forEach(d => {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+    ctx.setTransform(S, 0, 0, S, 0, 0);
+    ctx.fillStyle = '#fff';
+    ctx.fill(new Path2D(d), 'evenodd');
+    const img = ctx.getImageData(0, 0, W, H).data;
+    const pts = [];
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      if (img[(y * W + x) * 4 + 3] > 128) pts.push([x + 0.5, y + 0.5]);
+    }
+    lists.push(pts);
+  });
+  return { lists, W, H };
+}
+
+function buildMark() {
+  markGroup = new THREE.Group();
+  markGroup.visible = false;
+  scene.add(markGroup);
+
+  const { lists, W, H } = rasterizeMarkTargets();
+  const MARK_SIZE = 10, SPREAD_MIN = 10, SPREAD_SPAN = 13.5, THICKNESS = 1.5;
+  const n = MARK_COUNT;
+  const pos = new Float32Array(n * 3), tgt = new Float32Array(n * 3),
+        aSeed = new Float32Array(n), aSize = new Float32Array(n), aTri = new Float32Array(n);
+  for (let i = 0; i < n; i++) {
+    const tri = i % 2; // even -> outer, odd -> inner
+    const pts = lists[tri];
+    const [px, py] = pts[(Math.random() * pts.length) | 0];
+    tgt[i * 3] = (px / W - 0.5) * MARK_SIZE;
+    tgt[i * 3 + 1] = -(py / H - 0.5) * MARK_SIZE;
+    tgt[i * 3 + 2] = (Math.random() - 0.5) * THICKNESS;
+    const r = SPREAD_MIN + Math.random() * SPREAD_SPAN, ang = Math.random() * TAU;
+    pos[i * 3] = Math.cos(ang) * r;
+    pos[i * 3 + 1] = Math.sin(ang) * r;
+    pos[i * 3 + 2] = (Math.random() * 2 - 1) * 1.5;
+    aSeed[i] = Math.random();
+    aSize[i] = 0.5 + Math.random();
+    aTri[i] = tri;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('aTarget', new THREE.BufferAttribute(tgt, 3));
+  g.setAttribute('aSeed', new THREE.BufferAttribute(aSeed, 1));
+  g.setAttribute('aSize', new THREE.BufferAttribute(aSize, 1));
+  g.setAttribute('aTri', new THREE.BufferAttribute(aTri, 1));
+  markU = {
+    uProgress: { value: 0 }, uTime: { value: 0 }, uAlpha: { value: 0 },
+    uPointScale: { value: 0.2 * (tier === 'mobile' ? 0.5 : 1) }, uViewScale: { value: viewScale },
+    uColorA: { value: C(0x4977ff) }, uColorB: { value: C(0xd2bdff) }
+  };
+  const m = new THREE.ShaderMaterial({
+    uniforms: markU, vertexShader: MARK_VERT, fragmentShader: MARK_FRAG,
+    blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false, transparent: true
+  });
+  markPts = new THREE.Points(g, m);
+  markPts.frustumCulled = false;
+  markGroup.add(markPts);
+
+  // background motes — a loose cloud behind the mark
+  const mn = MOTE_COUNT;
+  const mpos = new Float32Array(mn * 3), mseed = new Float32Array(mn);
+  for (let i = 0; i < mn; i++) {
+    mpos[i * 3] = (Math.random() - 0.5) * 90;
+    mpos[i * 3 + 1] = (Math.random() - 0.5) * 90;
+    mpos[i * 3 + 2] = -6 - Math.random() * 46;
+    mseed[i] = Math.random();
+  }
+  const mg = new THREE.BufferGeometry();
+  mg.setAttribute('position', new THREE.BufferAttribute(mpos, 3));
+  mg.setAttribute('aSeed', new THREE.BufferAttribute(mseed, 1));
+  moteU = {
+    iTime: { value: 0 }, uAlpha: { value: 0 }, uViewScale: { value: viewScale }, uColor: { value: C(accent400) }
+  };
+  const mm = new THREE.ShaderMaterial({
+    uniforms: moteU, vertexShader: DUST_VERT, fragmentShader: DUST_FRAG,
+    blending: THREE.AdditiveBlending, depthTest: false, depthWrite: false, transparent: true
+  });
+  motePts = new THREE.Points(mg, mm);
+  motePts.frustumCulled = false;
+  markGroup.add(motePts);
+}
+
+function buildWarp() {
+  const n = 1400;
+  const pos = new Float32Array(n * 4 * 3);
+  const aSeed = new Float32Array(n * 4), aSpeed = new Float32Array(n * 4),
+        aRadius = new Float32Array(n * 4), aAngle = new Float32Array(n * 4),
+        aEnd = new Float32Array(n * 4), aSide = new Float32Array(n * 4);
+  const idx = new Uint32Array(n * 6);
+  for (let i = 0; i < n; i++) {
+    const seed = Math.random(), speed = 0.5 + 0.9 * Math.random(),
+          radius = 0.35 + 9 * Math.sqrt(Math.random()), angle = Math.random() * TAU;
+    for (let v = 0; v < 4; v++) {
+      const j = i * 4 + v;
+      aSeed[j] = seed; aSpeed[j] = speed; aRadius[j] = radius; aAngle[j] = angle;
+      aEnd[j] = v < 2 ? 0 : 1;             // 0 tail -> 1 head
+      aSide[j] = (v % 2 === 0) ? -1 : 1;   // across width
+    }
+    const b = i * 4, q = i * 6;
+    idx[q] = b; idx[q + 1] = b + 2; idx[q + 2] = b + 1;
+    idx[q + 3] = b + 2; idx[q + 4] = b + 3; idx[q + 5] = b + 1;
+  }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('aSeed', new THREE.BufferAttribute(aSeed, 1));
+  g.setAttribute('aSpeed', new THREE.BufferAttribute(aSpeed, 1));
+  g.setAttribute('aRadius', new THREE.BufferAttribute(aRadius, 1));
+  g.setAttribute('aAngle', new THREE.BufferAttribute(aAngle, 1));
+  g.setAttribute('aEnd', new THREE.BufferAttribute(aEnd, 1));
+  g.setAttribute('aSide', new THREE.BufferAttribute(aSide, 1));
+  g.setIndex(new THREE.BufferAttribute(idx, 1));
+  warpU = {
+    iTime: { value: 0 }, uBoost: { value: 0 }, uSurge: { value: 0 },
+    uSpread: { value: Math.max(1, innerWidth / innerHeight) }, uWidth: { value: 2.2 },
+    uResolution: { value: new THREE.Vector2(innerWidth, innerHeight) },
+    uOpacity: { value: 0 },
+    uHead: { value: C(accent300) }, uTail: { value: C(accent700) }, uPink: { value: C(signalGlow) }
+  };
+  const m = new THREE.ShaderMaterial({
+    uniforms: warpU, vertexShader: WARP_VERT, fragmentShader: WARP_FRAG,
+    blending: THREE.AdditiveBlending, side: THREE.DoubleSide, depthTest: false, transparent: true
+  });
+  warpMesh = new THREE.Mesh(g, m);
+  warpMesh.frustumCulled = false;
+  camera.add(warpMesh); // rides in front of the moving lens
+}
+
+/* ---------------- scene init ---------------- */
+try {
+  renderer = new THREE.WebGLRenderer({
+    canvas: $('scene'), antialias: tier !== 'mobile', powerPreference: 'high-performance'
+  });
+  renderer.setClearColor(0x02040d, 1);
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x02040d);
+  camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 600);
+  camera.position.set(0, 0, 15);
+  scene.add(camera);
+
+  buildMorph();
+  buildStarfield();
+  buildMark();
+  buildWarp();
+
+  composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+  const bloomPass = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0, 0.4, 0.85);
+  bloomPass.enabled = false; // strength 0 = inert — the clouds fake their own glow
+  composer.addPass(bloomPass);
+  finalPass = new ShaderPass({
+    uniforms: {
+      tDiffuse: { value: null }, iTime: { value: 0 },
+      iCornerLow: { value: C(accent900) }, iCornerHigh: { value: C(accent700) },
+      uSpread: { value: 0.28 }, uIntensity: { value: 2.6 }
+    },
+    vertexShader: FINAL_VERT, fragmentShader: FINAL_FRAG
+  });
+  composer.addPass(finalPass);
+} catch (err) {
+  renderer = null;
+  sceneWrap.style.display = 'none';
+  console.error('WebGL unavailable:', err);
+}
+
+/* ---------------- per-frame camera + uniforms ---------------- */
+const uniEye = new THREE.Vector3(), burstEye = new THREE.Vector3(), maelEye = new THREE.Vector3();
+const uniLook = new THREE.Vector3(), burstLook = new THREE.Vector3(), maelLook = new THREE.Vector3();
+const eye = new THREE.Vector3(), look = new THREE.Vector3();
+const ndcV = new THREE.Vector3(), rayDir = new THREE.Vector3(), pWorld = new THREE.Vector3(), fwd = new THREE.Vector3();
+
+const UNI_BLOOM = [1.5, 0.5, 2.4, 0.6, 1, 1.5];
+const BURST_BLOOM = [1.7, 0.34, 3, 0.3, 1, 1.9];
+const MAEL_BLOOM = [1.35, 0.4, 2.8, 0.38, 1, 1.9];
+const UNI_PTR = { radius: 3.4, push: 0.42, swirl: 0.75, glow: 1.1 };
+const BURST_PTR = { radius: 3.6, push: 0.5, swirl: 0.95, glow: 1.3 };
+const MAEL_PTR = { radius: 10, push: 1.3, swirl: 2.2, glow: 0.9 };
+
+function appearAmt(now) {
+  if (!loaded) return 0;
+  return cubicOut(clamp01((now - appearStart) / 1800));
+}
+function sceneTime(now) {
+  const t = (now - startTime) / 1000;
+  if (reduced && loaded && (now - appearStart) > 1800) {
+    if (frozenTime === null) frozenTime = t;
+    return frozenTime;
+  }
+  return t;
+}
+
+function updateScene(now) {
+  const st = scrollState;
+  const t = sceneTime(now);
+  const appear = appearAmt(now);
+
+  /* --- camera flight --- */
+  const dive = st.s1;
+  const uAngle = Math.sin(t * 0.035) * 0.16;
+  const uDist = 10.5 - 3.5 * dive;
+  uniEye.set(Math.sin(uAngle) * uDist, Math.sin(t * 0.05) * 2.2, Math.cos(uAngle) * uDist);
+  uniLook.set(0, 0, 0);
+
+  const orbit = st.burstPhase * 2.6 + Math.sin(t * 0.05) * 0.09 + pointer.x * 0.6 * pointer.active;
+  const bDist = 11 + 1.8 * st.burstPhase;
+  burstEye.set(Math.sin(orbit) * bDist, 2 + 6 * st.burstPhase, Math.cos(orbit) * bDist);
+  burstLook.set(0, 0, 0);
+
+  const onAxis = smoothstep(0, 0.65, st.exit);
+  const through = Math.pow(smoothstep(0.15, 1, st.exit), 3);
+  const ahead = smoothstep(0.12, 0.5, st.exit);
+  const pass = smoothstep(0, 1, st.tlp);
+  const swing = pass * 2.6;
+  const mRadius = lerp(26, 28, pass) * (1 - onAxis);
+  const eyeZ = 14 - 36 * through; // 14 -> -22 along the disc axis
+  const ew = fromDiscFrame(Math.cos(swing) * mRadius, Math.sin(swing) * mRadius, eyeZ);
+  maelEye.set(ew[0], ew[1], ew[2]);
+  const lw = fromDiscFrame(0, 0, (eyeZ - 40) * ahead);
+  maelLook.set(lw[0], lw[1], lw[2]);
+  const maelFov = lerp(lerp(66, 76, pass), 104, through);
+
+  eye.copy(uniEye).lerp(burstEye, st.t1).lerp(maelEye, st.t2);
+  look.copy(uniLook).lerp(burstLook, st.t1).lerp(maelLook, st.t2);
+  let fov = lerp(lerp(58, 62, st.t1), maelFov, st.t2);
+  const px = lerp(lerp(0.6, 0, st.t1), 8.85, st.t2);
+  const py = lerp(lerp(0.6, 2.2, st.t1), 7.08, st.t2);
+  const held = pointer.active * (1 - smoothstep(0, 0.5, st.exit));
+  eye.x += pointer.x * px * held;
+  eye.y += pointer.y * py * held;
+  eye.z += (1 - appear) * 8; // entrance dolly
+
+  camera.position.copy(eye);
+  camera.fov = fov;
+  camera.updateProjectionMatrix();
+  camera.lookAt(look);
+  camera.updateMatrixWorld();
+
+  /* --- pointer as a body in the scene --- */
+  if (pointer.active) {
+    ndcV.set(pointer.x, pointer.y, 0.5).unproject(camera);
+    rayDir.copy(ndcV).sub(camera.position).normalize();
+    const lookDist = camera.position.distanceTo(look) || 10;
+    pWorld.copy(camera.position).addScaledVector(rayDir, lookDist);
+    morphU.uPointer.value.copy(pWorld);
+  }
+  camera.getWorldDirection(fwd);
+  morphU.uPointerAxis.value.copy(fwd);
+  const t1 = st.t1, t2 = st.t2;
+  morphU.uPointerR.value = lerp(lerp(UNI_PTR.radius, BURST_PTR.radius, t1), MAEL_PTR.radius, t2);
+  morphU.uPointerPush.value = lerp(lerp(UNI_PTR.push, BURST_PTR.push, t1), MAEL_PTR.push, t2) * pointer.active;
+  morphU.uPointerSwirl.value = lerp(lerp(UNI_PTR.swirl, BURST_PTR.swirl, t1), MAEL_PTR.swirl, t2) * pointer.active;
+  morphU.uPointerGlow.value = lerp(lerp(UNI_PTR.glow, BURST_PTR.glow, t1), MAEL_PTR.glow, t2) * pointer.active;
+
+  /* --- morph cloud --- */
+  const dissolve = smoothstep(0.15, 0.9, st.logoAmt);
+  morphU.iTime.value = t;
+  morphU.uUniTime.value = t + 6; // prime the galaxy one lifetime
+  morphU.uT1.value = t1;
+  morphU.uT2.value = t2;
+  morphU.uNeedUni.value = t1 < 1 ? 1 : 0;
+  morphU.uNeedBurst.value = (t1 > 0 && t2 < 1) ? 1 : 0;
+  morphU.uNeedMael.value = t2 > 0 ? 1 : 0;
+  morphU.uMaelPhase.value = st.tlp;
+  morphU.uAlpha.value = appear * (1 - dissolve);
+  for (let i = 0; i < 6; i++) {
+    const v = lerp(lerp(UNI_BLOOM[i], BURST_BLOOM[i], t1), MAEL_BLOOM[i], t2);
+    if (i === 0) morphU.uCoreStrength.value = v;
+    else if (i === 1) morphU.uCoreSize.value = v;
+    else if (i === 2) morphU.uCoreSharp.value = v;
+    else if (i === 3) morphU.uHaloAmount.value = v;
+    else if (i === 4) morphU.uHaloWidth.value = v;
+    else morphU.uHaloFalloff.value = v;
+  }
+
+  /* --- starfield & dust --- */
+  starU.iTime.value = t;
+  starU.uAlpha.value = Math.min(1, appear * 1.4); // stars slightly lead
+  dustU.iTime.value = t;
+  dustU.uAlpha.value = appear;
+
+  /* --- logo mark, 10 units in front of the camera, facing it --- */
+  markGroup.visible = st.logoAmt > 0.001;
+  if (markGroup.visible) {
+    markGroup.position.copy(camera.position).addScaledVector(fwd, 10);
+    markGroup.quaternion.copy(camera.quaternion);
+    markGroup.rotateY(pointer.x * 0.08 * pointer.active);
+    markGroup.rotateX(-pointer.y * 0.06 * pointer.active);
+    markU.uProgress.value = st.logoAmt;
+    markU.uTime.value = t;
+    markU.uAlpha.value = clamp01(st.logoAmt * 1.6) * 3;
+    moteU.iTime.value = t;
+    moteU.uAlpha.value = st.logoAmt;
+  }
+
+  /* --- warp preloader --- */
+  if (warpMesh && !warpDead) {
+    warpU.iTime.value = t;
+    warpU.uBoost.value = loadP;
+    if (!loaded) {
+      warpU.uOpacity.value = Math.min(1, (now - startTime) / 500);
+    } else {
+      const k = Math.min(1, (now - warpDestroyStart) / 650);
+      warpU.uSurge.value = k;
+      warpU.uOpacity.value = Math.pow(1 - k, 3);
+      if (k >= 1) {
+        warpDead = true;
+        camera.remove(warpMesh);
+        warpMesh.geometry.dispose();
+        warpMesh.material.dispose();
+        warpMesh = null;
+      }
+    }
+  }
+
+  finalPass.uniforms.iTime.value = t;
+  composer.render();
+}
+
+/* ---------------- resize ---------------- */
+function onResize() {
+  layoutFrames();
+  measure();
+  if (!renderer) return;
+  const w = innerWidth, h = innerHeight;
+  viewScale = Math.min(1, Math.max(0.5, h / 1080));
+  const dpr = window.devicePixelRatio || 1;
+  const pr = tier === 'mobile' ? Math.min(dpr, 0.85) : Math.min(1.5, Math.max(0.75, dpr));
+  renderer.setPixelRatio(pr);
+  renderer.setSize(w, h);
+  composer.setPixelRatio(pr);
+  composer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  morphU.uRes.value.set(w * pr, h * pr);
+  morphU.uUniSize.value = 70 * viewScale;
+  morphU.uBurstSize.value = 44 * 1.55 * viewScale;
+  morphU.uMaelSize.value = 62 * 1.55 * viewScale;
+  starU.uViewScale.value = viewScale;
+  dustU.uViewScale.value = viewScale;
+  markU.uViewScale.value = viewScale;
+  moteU.uViewScale.value = viewScale;
+  if (warpU) {
+    warpU.uSpread.value = Math.max(1, w / h);
+    warpU.uResolution.value.set(w, h);
+  }
+}
+addEventListener('resize', onResize);
+
+/* ---------------- load / reveal ---------------- */
+const loaderEl = $('loader'), pctNum = $('pct-num'), loadFill = $('load-fill');
+function finishLoad(now) {
+  loaded = true;
+  appearStart = now;
+  warpDestroyStart = now;
+  pctNum.textContent = '100';
+  loadFill.style.transform = 'scaleX(1)';
+  if (reduced) { loaderEl.remove(); }
+  else {
+    tween({ dur: 450, ease: easeReveal, update: e => { loaderEl.style.opacity = (1 - e).toFixed(3); }, done: () => loaderEl.remove() });
+  }
+  revealNav();
+  latched.hero = true;
+  revealHero();
+}
+
+/* ---------------- main loop ---------------- */
+let lastFrame = 0, lastRender = 0;
+function loop(now) {
+  requestAnimationFrame(loop);
+  const dt = Math.min(64, now - (lastFrame || now));
+  lastFrame = now;
+
+  if (lenis) lenis.raf(now);
+  stepTweens(now);
+  stepSprings(dt);
+
+  /* fake load 0 -> 100 */
+  if (!loaded) {
+    loadP = Math.min(1, (now - startTime) / (reduced ? 600 : 1800));
+    pctNum.textContent = String(Math.round(loadP * 100));
+    railV += (loadP - railV) * 0.18;
+    loadFill.style.transform = `scaleX(${railV.toFixed(4)})`;
+    if (loadP >= 0.98) finishLoad(now);
+  }
+
+  /* section controller — measured tops -> weights */
+  const y = window.scrollY, vh = innerHeight;
+  const st = scrollState;
+  if (rects.hero) {
+    st.s1 = clamp01((y - rects.hero.top) / (rects.sitemap.top - rects.hero.top));
+    st.s2 = clamp01((y - rects.sitemap.top) / (rects.timeline.top - rects.sitemap.top));
+    st.t1 = smoothstep(0.25, 1, st.s1);            // morph1Start = 0.25
+    st.t2 = smoothstep(0.30, 0.95, st.s2);         // morph2Start = 0.30, morph2End = 0.95
+    st.dive = st.s1;
+    const burstBegins = rects.hero.top + 0.25 * (rects.sitemap.top - rects.hero.top);
+    st.burstPhase = clamp01((y - burstBegins) / (rects.timeline.top - burstBegins));
+    st.tlp = clamp01((y - rects.timeline.top) / Math.max(1, rects.timeline.height - vh));
+    st.exit = clamp01((y + 2 * vh - rects.impact.top) / (2.4 * vh));
+    st.logoAmt = clamp01((y - rects.impact.top + vh * 0.35) / (vh * 1.3));
+    st.active = !loaded ? 'none'
+      : st.logoAmt > 0.05 ? 'impact'
+      : st.s2 > 0.55 ? 'timeline'
+      : st.s1 > 0.55 ? 'sitemap'
+      : 'hero';
+  }
+
+  /* DOM fades (scene-fade per pinned overlay) */
+  const heroFade = loaded ? 1 - smoothstep(0.35, 0.7, st.s1) : 0;
+  const svcFade = loaded ? smoothstep(0.5, 0.85, st.s1) * (1 - smoothstep(0.5, 0.85, st.s2)) : 0;
+  const tlFade = loaded ? smoothstep(0.6, 0.95, st.s2) * (1 - smoothstep(0.2, 0.55, st.exit)) : 0;
+  const impFade = loaded ? smoothstep(0.08, 0.35, st.logoAmt) : 0;
+  setOverlay(ovHero, heroFade, -smoothstep(0.35, 0.7, st.s1) * 50);
+  setOverlay(ovServices, svcFade, -smoothstep(0.5, 0.85, st.s2) * 60);
+  setOverlay(ovTimeline, tlFade, 0);
+  setOverlay(ovImpact, impFade, 0);
+
+  if (loaded && !latched.services && svcFade > 0.05) { latched.services = true; revealServices(); }
+  if (loaded && !latched.timeline && tlFade > 0.05) { latched.timeline = true; revealTimeline(); }
+  if (loaded && !latched.impact && impFade > 0.02) { latched.impact = true; revealImpact(); }
+
+  /* roadmap rail travel (right-to-left) */
+  tlTrack.style.transform = `translateX(${(-st.tlp * TL_TRAVEL).toFixed(2)}px)`;
+  if (tlmOverflow > 0) $('tlm-list').style.transform = `translateY(${(-st.tlp * tlmOverflow).toFixed(2)}px)`;
+
+  /* hero icon spin — outer 16000ms, inner 9000ms, clockwise */
+  if (!reduced) {
+    triOuterEl.style.transform = `rotate(${((now % 16000) / 16000 * 360).toFixed(3)}deg)`;
+    triInnerEl.style.transform = `rotate(${((now % 9000) / 9000 * 360).toFixed(3)}deg)`;
+  }
+
+  /* canvas wrapper fade across the last slide */
+  let canvasOp = 1;
+  if (rects.impact) canvasOp = 1 - smoothstep(0, 1, clamp01((y - rects.impact.top) / Math.max(1, rects.impact.height - vh)));
+  sceneWrap.style.opacity = canvasOp.toFixed(3);
+  sceneWrap.style.visibility = canvasOp > 0.002 ? 'visible' : 'hidden';
+
+  /* render (frame-capped on phones/tablets; skip when faded out or hidden) */
+  if (renderer && canvasOp > 0.002 && !document.hidden) {
+    if (!FRAME_INTERVAL || now - lastRender >= FRAME_INTERVAL) {
+      lastRender = now;
+      updateScene(now);
+    }
+  }
+}
+
+layoutFrames();
+measure();
+onResize();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
