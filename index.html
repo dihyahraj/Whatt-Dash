@@ -997,7 +997,10 @@ function applyState(section, state) {
   const title = section.el.querySelector('.title');
   if (title) {
     if (state !== 'before') title.classList.add('played');   // cascade plays once
-    title.classList.toggle('is-leaving', state === 'after');
+    // Once the cascade has played the chars stay in place, so the title
+    // itself must fade out whenever its section is not active — both when
+    // scrolled past (after) and when scrolled back above it (before).
+    title.classList.toggle('is-leaving', state !== 'visible');
   }
 }
 
